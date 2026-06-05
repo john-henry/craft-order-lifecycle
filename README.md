@@ -8,6 +8,7 @@
 
 Track and visualize every event in your order's journey with comprehensive timeline views and detailed analytics.
 
+> [!IMPORTANT]
 > **Beta Release** - This plugin is currently in beta. APIs, database schema, and behaviour may change between releases. It is not recommended for production use without thorough testing in your environment. If you encounter a bug or unexpected behaviour, please [open an issue](https://github.com/john-henry/craft-order-lifecycle/issues) - feedback at this stage directly shapes the stable release.
 
 
