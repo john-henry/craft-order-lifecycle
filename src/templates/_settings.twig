@@ -1,0 +1,274 @@
+{% extends '/_layouts/cp' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% set fullPageForm = true %}
+{% set selectedSubnavItem = 'settings' %}
+
+{% do view.registerAssetBundle('johnhenry\\orderlifecycle\\assets\\OrderLifecycleAsset') %}
+
+{% set crumbs = [
+   { label: 'Order Lifecycle'|t('order-lifecycle'), url: cpUrl('order-lifecycle') }
+] %}
+
+
+{% set title = 'Settings' %}
+
+{% set tabs = {
+   general: { label: 'General Settings'|t('order-lifecycle'), url: '#general' },
+   logging: { label: 'Logging'|t('order-lifecycle'), url: '#logging' },
+   maintenance: { label: 'Maintenance'|t('order-lifecycle'), url: '#maintenance' },
+   integrations: { label: 'Integrations'|t('order-lifecycle'), url: '#integrations' },
+} %}
+
+{% block actionButton %}
+   <input type="submit" class="btn submit" value="{{ 'Save'|t('app') }}">
+{% endblock %}
+
+{% block content %}
+
+   <input type="hidden" name="action" value="order-lifecycle/settings/save">
+   <input type="hidden" name="pluginHandle" value="order-lifecycle">
+
+   <div id="general">
+      {{ forms.lightswitchField({
+         label: 'Show Lifecycle Stats'|t('order-lifecycle'),
+         instructions: 'Display the lifecycle statistics table in the order field showing key metrics like Order Started, Order Completed, First Transaction, and Order Paid.'|t('order-lifecycle'),
+         name: 'settings[showLifecycleStats]',
+         on: settings.showLifecycleStats,
+         errors: settings.getErrors('showLifecycleStats'),
+      }) }}
+
+      <hr>
+
+      <h2>{{ 'Performance'|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: 'Async Queue Logging'|t('order-lifecycle'),
+         instructions: 'Write log entries via the Craft queue instead of inline during the order save. Recommended for high-volume stores to keep checkout fast. Requires the queue worker to be running.'|t('order-lifecycle'),
+         warning: 'Logs will not appear immediately - they are written when the queue processes the job. Ensure your queue worker is running before enabling this.'|t('order-lifecycle'),
+         name: 'settings[asyncLogging]',
+         on: settings.asyncLogging,
+         errors: settings.getErrors('asyncLogging'),
+      }) }}
+   </div>
+   <div id="logging" class="hidden">
+
+      <h2>{{ "Order Events"|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: "Log Line Item Changes"|t('order-lifecycle'),
+         instructions: "Track when line items are added, removed, or modified in an order."|t('order-lifecycle'),
+         name: 'settings[logLineItems]',
+         on: settings.logLineItems,
+         errors: settings.getErrors('logLineItems'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Order Status Changes"|t('order-lifecycle'),
+         instructions: "Track when the order status changes (e.g., pending to completed)."|t('order-lifecycle'),
+         name: 'settings[logStatusChanges]',
+         on: settings.logStatusChanges,
+         errors: settings.getErrors('logStatusChanges'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Order Complete Event"|t('order-lifecycle'),
+         instructions: "Track when an order is marked as complete."|t('order-lifecycle'),
+         name: 'settings[logOrderComplete]',
+         on: settings.logOrderComplete,
+         errors: settings.getErrors('logOrderComplete'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Order Paid Event"|t('order-lifecycle'),
+         instructions: "Track when an order payment is successfully completed."|t('order-lifecycle'),
+         name: 'settings[logOrderPaid]',
+         on: settings.logOrderPaid,
+         errors: settings.getErrors('logOrderPaid'),
+      }) }}
+
+      <hr>
+
+      <h2>{{ "Customer & Address Events"|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: "Log Customer Changes"|t('order-lifecycle'),
+         instructions: "Track when customer information is updated on an order."|t('order-lifecycle'),
+         name: 'settings[logCustomerChanges]',
+         on: settings.logCustomerChanges,
+         errors: settings.getErrors('logCustomerChanges'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Address Changes"|t('order-lifecycle'),
+         instructions: "Track changes to billing and shipping addresses."|t('order-lifecycle'),
+         name: 'settings[logAddressChanges]',
+         on: settings.logAddressChanges,
+         errors: settings.getErrors('logAddressChanges'),
+      }) }}
+
+      <hr>
+
+      <h2>{{ "Shipping & Discounts"|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: "Log Shipping Method Changes"|t('order-lifecycle'),
+         instructions: "Track when the shipping method is changed on an order."|t('order-lifecycle'),
+         name: 'settings[logShippingMethodChanges]',
+         on: settings.logShippingMethodChanges,
+         errors: settings.getErrors('logShippingMethodChanges'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Coupon/Discount Changes"|t('order-lifecycle'),
+         instructions: "Track when coupons or discounts are applied or removed."|t('order-lifecycle'),
+         name: 'settings[logCouponChanges]',
+         on: settings.logCouponChanges,
+         errors: settings.getErrors('logCouponChanges'),
+      }) }}
+
+      <hr>
+
+      <h2>{{ "Payment Events"|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: "Log Payment Attempts"|t('order-lifecycle'),
+         instructions: "Track when payment processing is attempted."|t('order-lifecycle'),
+         name: 'settings[logPaymentAttempts]',
+         on: settings.logPaymentAttempts,
+         errors: settings.getErrors('logPaymentAttempts'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Payment Authorized"|t('order-lifecycle'),
+         instructions: "Track when a payment is authorized."|t('order-lifecycle'),
+         name: 'settings[logPaymentAuthorized]',
+         on: settings.logPaymentAuthorized,
+         errors: settings.getErrors('logPaymentAuthorized'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Payment Captured"|t('order-lifecycle'),
+         instructions: "Track when a payment is captured."|t('order-lifecycle'),
+         name: 'settings[logPaymentCaptured]',
+         on: settings.logPaymentCaptured,
+         errors: settings.getErrors('logPaymentCaptured'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log Payment Refunded"|t('order-lifecycle'),
+         instructions: "Track when payments are refunded."|t('order-lifecycle'),
+         name: 'settings[logPaymentRefunded]',
+         on: settings.logPaymentRefunded,
+         errors: settings.getErrors('logPaymentRefunded'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Log All Payment Transactions"|t('order-lifecycle'),
+         instructions: "Track all payment transaction details (may create many log entries)."|t('order-lifecycle'),
+         warning: "This may generate a large number of log entries."|t('order-lifecycle'),
+         name: 'settings[logPaymentTransactions]',
+         on: settings.logPaymentTransactions,
+         errors: settings.getErrors('logPaymentTransactions'),
+      }) }}
+
+      <hr>
+
+      <h2>{{ "Privacy & Data Collection"|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: "Collect User IP Address"|t('order-lifecycle'),
+         instructions: "Store the IP address of users making changes to orders."|t('order-lifecycle'),
+         warning: "Consider privacy regulations (GDPR, CCPA) in your jurisdiction."|t('order-lifecycle'),
+         name: 'settings[collectUserIp]',
+         on: settings.collectUserIp,
+         errors: settings.getErrors('collectUserIp'),
+      }) }}
+
+      {{ forms.lightswitchField({
+         label: "Collect User ID"|t('order-lifecycle'),
+         instructions: "Store the user ID of users making changes to orders."|t('order-lifecycle'),
+         name: 'settings[collectUserId]',
+         on: settings.collectUserId,
+         errors: settings.getErrors('collectUserId'),
+      }) }}
+
+
+
+
+
+
+   </div>
+
+<div id="maintenance" class="hidden">
+   <h2>{{ "Log Maintenance"|t('order-lifecycle') }}</h2>
+
+   {{ forms.textField({
+      label: "Auto-Prune Logs After Days"|t('order-lifecycle'),
+      instructions: "Automatically delete logs older than this many days. Set to 0 to disable auto-pruning. Recommended: 90-180 days."|t('order-lifecycle'),
+      id: 'autoPruneLogs',
+      name: 'autoPruneLogs',
+      value: settings.autoPruneLogs,
+      type: 'number',
+      min: 0,
+      size: 5,
+      errors: settings.getErrors('autoPruneLogs'),
+      warning: config.autoPruneLogs is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+      disabled: config.autoPruneLogs is defined,
+   }) }}
+
+   <div class="readable">
+      <blockquote class="note">
+         <p>{{ "You can also manually purge logs using the CLI command:"|t('order-lifecycle') }}</p>
+         <pre><code>php craft order-lifecycle/logs/purge --days=90</code></pre>
+      </blockquote>
+   </div>
+
+
+</div>
+
+   <div id="integrations" class="hidden">
+      <h2>{{ "AI Insights"|t('order-lifecycle') }}</h2>
+
+      {{ forms.autosuggestField({
+         label: "Anthropic API Key"|t('order-lifecycle'),
+         instructions: "API key for Claude AI. Used to generate on-demand insights in the Order Lifecycle field. Leave blank to disable AI insights."|t('order-lifecycle'),
+         id: 'anthropicApiKey',
+         name: 'anthropicApiKey',
+         suggestEnvVars: true,
+         value: settings.anthropicApiKey,
+         errors: settings.getErrors('anthropicApiKey'),
+         warning: config.anthropicApiKey is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+      }) }}
+
+      <hr>
+
+      <h2>{{ "AI Prompt Customisation"|t('order-lifecycle') }}</h2>
+
+      <p class="light">{{ "Customise the prompts sent to Claude. Leave blank to use the built-in defaults. Use {placeholder} tokens to insert live data - see the documentation for the full list of available tokens."|t('order-lifecycle') }}</p>
+
+      {{ forms.textareaField({
+         label: "Per-Order Insights Prompt"|t('order-lifecycle'),
+         instructions: "Available tokens: {total} {status} {completed} {customerType} {totalEvents} {duration} {paymentAttempts} {paymentFailed} {emailFailures} {statusChanges} {lineItemChanges} {addressChanges} {shippingChanges} {eventTimeline}"|t('order-lifecycle'),
+         id: 'orderInsightsPrompt',
+         name: 'settings[orderInsightsPrompt]',
+         value: settings.orderInsightsPrompt,
+         rows: 10,
+         errors: settings.getErrors('orderInsightsPrompt'),
+         warning: config.orderInsightsPrompt is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+      }) }}
+
+      {{ forms.textareaField({
+         label: "Store Insights Prompt"|t('order-lifecycle'),
+         instructions: "Available tokens: {days} {totalLogs} {uniqueOrders} {cartsCreated} {ordersCompleted} {conversionRate} {abandonmentRate} {avgCartValue} {paymentAttempts} {avgPaymentAttempts} {refunds} {couponApplied} {emailsSent} {emailsFailed} {emailSuccessRate} {topTypes}"|t('order-lifecycle'),
+         id: 'storeInsightsPrompt',
+         name: 'settings[storeInsightsPrompt]',
+         value: settings.storeInsightsPrompt,
+         rows: 10,
+         errors: settings.getErrors('storeInsightsPrompt'),
+         warning: config.storeInsightsPrompt is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+      }) }}
+   </div>
+
+{% endblock %}

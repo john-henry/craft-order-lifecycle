@@ -1,0 +1,11 @@
+{% extends '_layouts/cp' %}
+
+{% set selectedSubnavItem = 'export' %}
+{% set title = 'Export Lifecycle Events'|t('order-lifecycle') %}
+{% set crumbs = [
+    { label: 'Order Lifecycle'|t('order-lifecycle'), url: cpUrl('order-lifecycle') }
+] %}
+
+{% block content %}
+    {% include 'order-lifecycle/_utilities/export' %}
+{% endblock %}

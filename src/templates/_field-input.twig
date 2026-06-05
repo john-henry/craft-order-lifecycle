@@ -1,0 +1,222 @@
+
+{% import 'order-lifecycle/_macros/status-badges.twig' as badges %}
+{% import 'order-lifecycle/_macros/event-icons.twig' as icons %}
+<div class="order-lifecycle-field">
+   
+   {% if logs|length %}
+   
+   {% if craft.app.plugins.getPlugin('order-lifecycle').settings.showLifecycleStats %}
+	  {{ include('order-lifecycle/_lifecycle-stats.twig') }}
+   {% endif %}
+
+   {% if craft.app.plugins.getPlugin('order-lifecycle').settings.anthropicApiKey %}
+   {% set savedInsights = logs|filter(l => l.type == 'aiInsights')|first %}
+   <div class="lifecycle-ai-section" data-order-id="{{ order.id ?? '' }}">
+      <button type="button" class="btn btn-ai lifecycle-ai-btn">
+         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" aria-hidden="true"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828l.645-1.937ZM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.734 1.734 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.734 1.734 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.734 1.734 0 0 0 3.407 2.31l.387-1.162ZM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L10.863.1Z"/></svg>
+         {{ (savedInsights ? 'Refresh AI Insights' : 'AI Insights')|t('order-lifecycle') }}
+      </button>
+      <div class="lifecycle-ai-result{% if not savedInsights %} hidden{% endif %}">
+         <div class="lifecycle-ai-meta">
+            {% if savedInsights %}
+               <span class="light">{{ 'Generated'|t('order-lifecycle') }} {{ savedInsights.dateCreated|datetime('short') }}</span>
+            {% endif %}
+         </div>
+         <div class="lifecycle-ai-content">{{ (savedInsights.message ?? '')|md }}</div>
+      </div>
+   </div>
+   {% endif %}
+
+	  <div class="lifecycle-timeline">
+		 {% for row in logs|filter(l => l.type != 'aiInsights') %}
+			<div class="lifecycle-event">
+			   <div class="event-header">
+				  <div class="event-icon">
+					 {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
+				  </div>
+				  <div class="event-content">
+					 <div class="event-title">
+						{% set snapshotData = row.snapshot|json_decode %}
+						{% set attemptCount = snapshotData.payload.attempt ?? null %}
+						
+						<strong>{{ row.type|replace({'/([A-Z])/': ' $1'})|trim|title }}</strong>
+						{% if attemptCount and attemptCount > 1 %}
+						   <span class="attempt-count">({{ attemptCount }} attempts)</span>
+						{% endif %}
+						{# Add status badges for specific event types #}
+						{% if row.type starts with 'payment' %}
+						   {% set snapshotData = row.snapshot|json_decode %}
+						   {% set payloadTransactionId = snapshotData.payload.transactionId ?? null %}
+						   {% set transactionStatus = null %}
+						   
+						   {% if payloadTransactionId %}
+							  {% for transaction in transactions %}
+								 {% if transaction.id == payloadTransactionId %}
+									{% set transactionStatus = transaction.status %}
+								 {% endif %}
+							  {% endfor %}
+						   {% endif %}
+						   
+						   {% if transactionStatus %}
+							  {{ badges.statusBadge(transactionStatus|title|t('order-lifecycle'), transactionStatus) }}
+						   {% endif %}
+						{% elseif row.type == 'emailSent' %}
+						   {{ badges.statusBadge('Sent'|t('order-lifecycle'), 'success') }}
+						{% elseif row.type == 'emailFailed' %}
+						   {{ badges.statusBadge('Failed'|t('order-lifecycle'), 'error') }}
+						{% elseif row.type == 'orderCompleted' %}
+						   {{ badges.statusBadge('Completed'|t('order-lifecycle'), 'success') }}
+						{% elseif row.type == 'orderPaid' %}
+						   {{ badges.statusBadge('Paid'|t('order-lifecycle'), 'success') }}
+						
+						{% elseif row.type == 'statusChanged' %}
+						   {% set snapshotData = row.snapshot|json_decode %}
+						   {% set newStatusId = snapshotData.payload.newStatusId ?? null %}
+						   {% if newStatusId and statuses is defined %}
+							  {% for status in statuses %}
+								 {% if status.id == newStatusId %}
+									{{ badges.statusBadge(status.name, status.color) }}
+								 {% endif %}
+							  {% endfor %}
+						   {% endif %}
+						{% endif %}
+					 </div>
+					 <div class="event-timestamp">
+						{{ row.dateCreated|datetime('short') }}
+					 </div>
+					 {% if row.message %}
+						<div class="event-message{% if 'removed' in row.message %} text-removal{% elseif 'set' in row.message %} text-add{% endif %}"><span>{{ row.message|raw }}</span></div>
+					 {% endif %}
+				  </div>
+			   </div>
+			   {% if row.snapshot %}
+				  <details class="event-details">
+					 <summary class="link">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+						   <path d="M8 3a.5.5 0 01.5.5v4h4a.5.5 0 010 1h-4v4a.5.5 0 01-1 0v-4h-4a.5.5 0 010-1h4v-4A.5.5 0 018 3z"/>
+						</svg>
+						{{ 'View snapshot details'|t('order-lifecycle') }}
+					 </summary>
+					 <div class="snapshot-content">
+						{% set snapshotData = row.snapshot|json_decode %}
+						{% if row.type == 'customerSet' %}
+						   {# For emailSet events, show only the customer data #}
+						   <pre class="order-lifecycle-pre">{{ snapshotData.customer|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+						{% elseif row.type == 'emailSent' or row.type == 'emailFailed' %}
+						   {# For email events, show only the payload #}
+						   <pre class="order-lifecycle-pre">{{ snapshotData.payload|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+						{% elseif row.type == 'statusChanged' %}
+						   {# For status change events, show only the payload #}
+						   <pre class="order-lifecycle-pre">{{ snapshotData.payload|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+						{% elseif row.type == 'lineItemAdded' or row.type == 'lineItemRemoved' %}
+						   {# For status change events, show only the payload #}
+						   <pre class="order-lifecycle-pre">{{ snapshotData.lineItems|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+						{% elseif row.type  starts with 'coupon' %}
+						   {# For coupon events, show only the discounts #}
+						   <pre class="order-lifecycle-pre">{{ snapshotData.discounts|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+						{% elseif row.type starts with 'payment' %}
+						   {# For payment events, show payload and transactions #}
+						  {# <h4>{{ 'Event Details'|t('order-lifecycle') }}</h4>
+						   <pre><code class="language-json">{{ snapshotData.payload|json_encode(448) }}</code></pre>#}
+						{% set payloadTransactionId = snapshotData.payload.transactionId ?? null %}
+						{% if payloadTransactionId %}
+						   {# Find the matching transaction #}
+						   {% set matchingTransaction = null %}
+						   {% set refundTransactions = [] %}
+						   {% for transaction in transactions %}
+							  {% if transaction.id == payloadTransactionId %}
+								 {% set matchingTransaction = transaction %}
+							  {% endif %}
+						   {% endfor %}
+						   
+						   {# Find refund transactions only for paymentRefunded events #}
+						   {% if matchingTransaction and row.type == 'paymentRefunded' %}
+							  {% for transaction in transactions %}
+								 {% if transaction.parentId == matchingTransaction.id %}
+									{% set refundTransactions = refundTransactions|merge([transaction]) %}
+								 {% endif %}
+							  {% endfor %}
+							  {% else %}
+						   {% endif %}
+						   
+						   {% if matchingTransaction %}
+							  
+							  
+							  {% if refundTransactions|length %}
+								 <h4 style="margin-top: 1rem;">{{ 'Refund Transactions'|t('order-lifecycle') }}</h4>
+								 {% for refundTransaction in refundTransactions %}
+									{% set refundTransactionData = {
+									   id: refundTransaction.id,
+									   type: refundTransaction.type,
+									   status: refundTransaction.status,
+									   amount: refundTransaction.amount,
+									   currency: refundTransaction.currency,
+									   paymentAmount: refundTransaction.paymentAmount,
+									   paymentCurrency: refundTransaction.paymentCurrency,
+									   hash: refundTransaction.hash,
+									   reference: refundTransaction.reference,
+									   code: refundTransaction.code,
+									   message: refundTransaction.message,
+									   note: refundTransaction.note,
+									   response: refundTransaction.response,
+									   gatewayId: refundTransaction.gatewayId,
+									   orderId: refundTransaction.orderId,
+									   parentId: refundTransaction.parentId,
+									   userId: refundTransaction.userId,
+									   dateCreated: refundTransaction.dateCreated|date('c'),
+									   dateUpdated: refundTransaction.dateUpdated|date('c'),
+									} %}
+									<pre class="order-lifecycle-pre">{{ refundTransactionData|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+								 {% endfor %}
+								 {% else %}
+									<h4 style="margin-top: 1rem;">{{ 'Transaction Details'|t('order-lifecycle') }}</h4>
+									{% set transactionData = {
+									   id: matchingTransaction.id,
+									   type: matchingTransaction.type,
+									   status: matchingTransaction.status,
+									   amount: matchingTransaction.amount,
+									   currency: matchingTransaction.currency,
+									   paymentAmount: matchingTransaction.paymentAmount,
+									   paymentCurrency: matchingTransaction.paymentCurrency,
+									   hash: matchingTransaction.hash,
+									   reference: matchingTransaction.reference,
+									   code: matchingTransaction.code,
+									   message: matchingTransaction.message,
+									   note: matchingTransaction.note,
+									   response: matchingTransaction.response,
+									   gatewayId: matchingTransaction.gatewayId,
+									   orderId: matchingTransaction.orderId,
+									   parentId: matchingTransaction.parentId,
+									   userId: matchingTransaction.userId,
+									   dateCreated: matchingTransaction.dateCreated|date('c'),
+									   dateUpdated: matchingTransaction.dateUpdated|date('c'),
+									} %}
+									<pre class="order-lifecycle-pre">{{ transactionData|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+							  {% endif %}
+						   {% else %}
+							  <p class="light">{{ 'Transaction #'|t('order-lifecycle') }}{{ payloadTransactionId }} {{ 'not found.'|t('order-lifecycle') }}</p>
+						   {% endif %}
+						{% endif %}
+						{% else %}
+						   {# For all other events, show the full snapshot #}
+						   <pre class="order-lifecycle-pre">{{ snapshotData|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+						{% endif %}
+					 </div>
+				  </details>
+			   {% endif %}
+			</div>
+		 {% endfor %}
+	  </div>
+	  
+   {% else %}
+	  <div class="empty-state">
+		 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<circle cx="12" cy="12" r="10"></circle>
+			<polyline points="12 6 12 12 16 14"></polyline>
+		 </svg>
+		 <h3>{{ 'No Order lifecycle events yet'|t('order-lifecycle') }}</h3>
+		 <p>{{ 'Events will be recorded as customer interact with this order.'|t('order-lifecycle') }}</p>
+	  </div>
+	  
+   {% endif %}
+</div>

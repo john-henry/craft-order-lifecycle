@@ -1,0 +1,301 @@
+{% import '_includes/forms.twig' as forms %}
+{% do view.registerAssetBundle('johnhenry\\orderlifecycle\\assets\\OrderLifecycleAsset') %}
+
+   
+   <p>{{ 'Export order lifecycle events as CSV for analysis in BI tools, spreadsheets, or data warehouses.'|t('order-lifecycle') }}</p>
+   
+   <form method="post" action="{{ actionUrl('order-lifecycle/export/csv') }}" target="_blank">
+	  {{ csrfInput() }}
+	  
+	  <div class="field">
+		 <div class="heading">
+			<label>{{ 'Date Range Presets'|t('order-lifecycle') }}</label>
+			<div class="instructions">
+			<p>{{ 'Quick select common date ranges'|t('order-lifecycle') }}</p>
+			</div>
+		 </div>
+		 <div class="input">
+			<div class="btngroup">
+			   <button type="button" class="btn date-preset-btn" data-preset="today">{{ 'Today'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="yesterday">{{ 'Yesterday'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="last7">{{ 'Last 7 days'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="last30">{{ 'Last 30 days'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="last90">{{ 'Last 90 days'|t('order-lifecycle') }}</button>
+			</div>
+			<div class="btngroup">
+			   <button type="button" class="btn date-preset-btn" data-preset="thisMonth">{{ 'This Month'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="lastMonth">{{ 'Last Month'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="thisYear">{{ 'This Year'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="last365">{{ 'Last 365 days'|t('order-lifecycle') }}</button>
+			   <button type="button" class="btn date-preset-btn" data-preset="all">{{ 'All Time'|t('order-lifecycle') }}</button>
+			</div>
+		 </div>
+	  </div>
+	  
+	  {{ forms.dateTimeField({
+		 label: 'Date From'|t('order-lifecycle'),
+		 id: 'dateFrom',
+		 name: 'dateFrom',
+		 value: now|date_modify('-30 days'),
+	  }) }}
+
+	  {{ forms.dateTimeField({
+		 label: 'Date To'|t('order-lifecycle'),
+		 id: 'dateTo',
+		 name: 'dateTo',
+		 value: now,
+	  }) }}
+	  <hr>
+	  <div class="field">
+		 <div class="heading">
+			<label for="orderId">{{ 'Order ID (Optional)'|t('order-lifecycle') }}</label>
+			<div class="instructions">
+			<p>{{ 'Leave empty to export all orders'|t('order-lifecycle') }}</p>
+			</div>
+		 </div>
+		 <div class="input">
+			{{ forms.text({
+			   type: 'number',
+			   id: 'orderId',
+			   name: 'orderId',
+			   placeholder: 'e.g. 123',
+			}) }}
+		 </div>
+	  </div>
+	  <hr>
+	  <fieldset class="field">
+		 <div class="heading">
+			<legend>{{ 'Event Types'|t('order-lifecycle') }}</legend>
+			<div class="instructions">
+			   <p>{{ 'Select specific event types to include in the export. If you export without selecting any event types, all events will be included.'|t('order-lifecycle') }}</p>
+			</div>
+		 </div>
+		 <div class="input">
+
+			<div id="event-types-list">
+
+			   <a id="select-all-events">
+				  {{ 'Select All'|t('order-lifecycle') }}
+			   </a>
+
+			   {% for eventType in eventTypes %}
+				  <div>
+					 {{ forms.checkbox({
+						label: eventType.label(),
+						name: 'eventTypes[]',
+						value: eventType.value,
+						class: 'event-checkbox'
+					 }) }}
+				  </div>
+			   {% endfor %}
+			</div>
+		 </div>
+	  </fieldset>
+	  <hr>
+	  <div class="field">
+		 <div class="heading">
+			<label>{{ 'Columns to Export'|t('order-lifecycle') }}</label>
+			<div class="instructions">
+			<p>{{ 'Specify the columns you wish to export and their order.'|t('order-lifecycle') }}</p>
+			</div>
+		 </div>
+		 <div class="input">
+			<table id="export-columns" class="data fullwidth collapsible">
+			   <thead>
+			   <tr>
+				  <th></th>
+				  <th>{{ 'Enabled'|t('order-lifecycle') }}</th>
+				  <th>{{ 'Column Name'|t('order-lifecycle') }}</th>
+			   </tr>
+			   </thead>
+			   <tbody id="exportColumnsList">
+			   <tr data-column="id">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[id][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Log ID'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[id][label]" value="Log ID">
+					 <input type="hidden" name="exportColumns[id][order]" class="order-input" value="0">
+				  </td>
+			   </tr>
+			   <tr data-column="dateCreated">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[dateCreated][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Date/Time'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[dateCreated][label]" value="Date/Time">
+					 <input type="hidden" name="exportColumns[dateCreated][order]" class="order-input" value="1">
+				  </td>
+			   </tr>
+			   <tr data-column="orderId">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[orderId][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Order ID'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[orderId][label]" value="Order ID">
+					 <input type="hidden" name="exportColumns[orderId][order]" class="order-input" value="2">
+				  </td>
+			   </tr>
+			   <tr data-column="orderNumber">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[orderNumber][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Order Number'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[orderNumber][label]" value="Order Number">
+					 <input type="hidden" name="exportColumns[orderNumber][order]" class="order-input" value="3">
+				  </td>
+			   </tr>
+			   <tr data-column="type">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[type][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Event Type'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[type][label]" value="Event Type">
+					 <input type="hidden" name="exportColumns[type][order]" class="order-input" value="4">
+				  </td>
+			   </tr>
+			   <tr data-column="message">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[message][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Message'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[message][label]" value="Message">
+					 <input type="hidden" name="exportColumns[message][order]" class="order-input" value="5">
+				  </td>
+			   </tr>
+			   <tr data-column="email">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[email][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Customer Email'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[email][label]" value="Customer Email">
+					 <input type="hidden" name="exportColumns[email][order]" class="order-input" value="6">
+				  </td>
+			   </tr>
+			   <tr data-column="orderStatus">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[orderStatus][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Order Status'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[orderStatus][label]" value="Order Status">
+					 <input type="hidden" name="exportColumns[orderStatus][order]" class="order-input" value="7">
+				  </td>
+			   </tr>
+			   <tr data-column="totalPrice">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[totalPrice][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Total Price'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[totalPrice][label]" value="Total Price">
+					 <input type="hidden" name="exportColumns[totalPrice][order]" class="order-input" value="8">
+				  </td>
+			   </tr>
+			   <tr data-column="currency">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[currency][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Currency'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[currency][label]" value="Currency">
+					 <input type="hidden" name="exportColumns[currency][order]" class="order-input" value="9">
+				  </td>
+			   </tr>
+			   <tr data-column="payload">
+				  <td class="thin">
+					 <a class="move icon" title="Reorder"></a>
+				  </td>
+				  <td>
+					 {{ forms.lightswitchField({
+						name: 'exportColumns[payload][checked]',
+						on: true,
+					 }) }}
+				  </td>
+				  <td>
+					 {{ 'Payload (JSON)'|t('order-lifecycle') }}
+					 <input type="hidden" name="exportColumns[payload][label]" value="Payload (JSON)">
+					 <input type="hidden" name="exportColumns[payload][order]" class="order-input" value="10">
+				  </td>
+			   </tr>
+			   </tbody>
+			</table>
+		 </div>
+	  </div>
+	  <hr>
+	  
+	  <div class="field">
+		 <div class="buttons">
+			<button type="submit" class="btn submit">
+			   {{ 'Export CSV'|t('order-lifecycle') }}
+			</button>
+		 </div>
+	  </div>
+   </form>
