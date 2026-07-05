@@ -168,6 +168,52 @@ describe('Formatter::compareLineItems()', function () {
     });
 });
 
+describe('Formatter XSS escaping', function () {
+    it('escapes coupon codes', function () {
+        expect(Formatter::couponChange(null, '<img src=x onerror=alert(1)>'))
+            ->toBe("Coupon code '&lt;img src=x onerror=alert(1)&gt;' applied");
+    });
+
+    it('escapes SKUs in line item changes', function () {
+        $changes = Formatter::compareLineItems(
+            [],
+            [['sku' => '<script>alert(1)</script>', 'qty' => 1, 'subtotal' => 10.00]]
+        );
+        expect($changes)->toContain("'&lt;script&gt;alert(1)&lt;/script&gt;' added (qty: 1)");
+    });
+
+    it('escapes customer email addresses', function () {
+        expect(Formatter::customerChange(null, '"><script>alert(1)</script>@example.com'))
+            ->toBe('Email set to \'&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;@example.com\'');
+    });
+
+    it('escapes address fields on initial set', function () {
+        $result = Formatter::addressChange(null, [
+            'firstName' => '<img src=x onerror=alert(1)>',
+            'lastName' => 'Doe',
+            'addressLine1' => '123 Main St',
+            'locality' => 'City',
+            'countryCode' => 'IE',
+        ]);
+        expect($result)->toContain('&lt;img src=x onerror=alert(1)&gt;')
+            ->not->toContain('<img src=x');
+    });
+
+    it('escapes address fields on update', function () {
+        $result = Formatter::addressChange(
+            ['addressLine1' => '123 Main St'],
+            ['addressLine1' => '<script>alert(1)</script>'],
+        );
+        expect($result)->toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+            ->not->toContain('<script>');
+    });
+
+    it('escapes shipping method names', function () {
+        expect(Formatter::shippingMethodChange(null, '<script>alert(1)</script>'))
+            ->toBe('Shipping method set to <strong>&lt;script&gt;alert(1)&lt;/script&gt;</strong>');
+    });
+});
+
 describe('Formatter::sanitize()', function () {
     it('escapes HTML special characters', function () {
         expect(Formatter::sanitize('<script>alert("xss")</script>'))

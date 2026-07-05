@@ -1,219 +1,143 @@
-{# Statistics Table #}
+{# =========================================================================
+   Order Lifecycle Metrics
+   Card summary of the order's key conversion metrics (time to convert,
+   checkout duration, cart activity, customer type) plus a started/completed
+   summary bar with request origin.
+   ========================================================================= #}
 <div class="lifecycle-stats">
-   <table class="data fullwidth">
-	  <thead>
-	  <tr>
-		 <th>{{ 'Metric'|t('order-lifecycle') }}</th>
-		 <th>{{ 'Date/Time'|t('order-lifecycle') }}</th>
-		 <th>{{ 'Notes'|t('order-lifecycle') }}</th>
-	  </tr>
-	  </thead>
-	  <tbody>
-	  {% set cartCreated = null %}
-	  {% set firstCartActivity = null %}
-	  {% set checkoutStarted = null %}
-	  {% set orderCompleted = null %}
-	  {% set firstTransaction = null %}
-	  {% set orderPaid = null %}
-	  {% set paymentAttempts = 0 %}
-	  {% set itemsAdded = 0 %}
-	  {% set itemsRemoved = 0 %}
+   {% set cartCreated = null %}
+   {% set firstCartActivity = null %}
+   {% set checkoutStarted = null %}
+   {% set orderCompleted = null %}
+   {% set orderPaid = null %}
+   {% set itemsAdded = 0 %}
+   {% set itemsRemoved = 0 %}
+   {% set firstIp = null %}
 
-	  {# Find key events #}
-	  {% for log in logs %}
-		 {% if log.type == 'cartCreated' and cartCreated is null %}
-			{% set cartCreated = log.dateCreated|date('U') %}
-			{% set firstCartActivity = log.dateCreated|date('U') %}
-		 {% endif %}
+   {% for log in logs %}
+      {% if log.type == 'cartCreated' and cartCreated is null %}
+         {% set cartCreated = log.dateCreated|date('U') %}
+         {% set firstCartActivity = log.dateCreated|date('U') %}
+      {% endif %}
 
-		 {# Track first cart activity (any action in cart) #}
-		 {% if firstCartActivity is null and (log.type == 'lineItemAdded' or log.type == 'lineItemRemoved' or log.type == 'cartUpdated') %}
-			{% set firstCartActivity = log.dateCreated|date('U') %}
-		 {% endif %}
+      {% if firstCartActivity is null and (log.type == 'lineItemAdded' or log.type == 'lineItemRemoved' or log.type == 'cartUpdated') %}
+         {% set firstCartActivity = log.dateCreated|date('U') %}
+      {% endif %}
 
-		 {# Track checkout started #}
-		 {% if log.type == 'checkoutStarted' and checkoutStarted is null %}
-			{% set checkoutStarted = log.dateCreated|date('U') %}
-		 {% endif %}
+      {% if log.type == 'checkoutStarted' and checkoutStarted is null %}
+         {% set checkoutStarted = log.dateCreated|date('U') %}
+      {% endif %}
 
-		 {% if log.type == 'orderCompleted' and orderCompleted is null %}
-			{% set orderCompleted = log.dateCreated|date('U') %}
-		 {% endif %}
+      {% if log.type == 'orderCompleted' and orderCompleted is null %}
+         {% set orderCompleted = log.dateCreated|date('U') %}
+      {% endif %}
 
-		 {# Count payment attempts #}
-		 {% if log.type == 'paymentAttempt' %}
-			{% set paymentAttempts = paymentAttempts + 1 %}
-			{% if firstTransaction is null %}
-			   {% set firstTransaction = log.dateCreated|date('U') %}
-			{% endif %}
-		 {% endif %}
+      {% if log.type == 'orderPaid' and orderPaid is null %}
+         {% set orderPaid = log.dateCreated|date('U') %}
+      {% endif %}
 
-		 {% if log.type == 'orderPaid' and orderPaid is null %}
-			{% set orderPaid = log.dateCreated|date('U') %}
-		 {% endif %}
+      {% if log.type == 'lineItemAdded' %}
+         {% set itemsAdded = itemsAdded + 1 %}
+      {% endif %}
+      {% if log.type == 'lineItemRemoved' %}
+         {% set itemsRemoved = itemsRemoved + 1 %}
+      {% endif %}
 
-		 {# Count items added and removed #}
-		 {% if log.type == 'lineItemAdded' %}
-			{% set itemsAdded = itemsAdded + 1 %}
-		 {% endif %}
-		 {% if log.type == 'lineItemRemoved' %}
-			{% set itemsRemoved = itemsRemoved + 1 %}
-		 {% endif %}
-	  {% endfor %}
+      {% if firstIp is null and log.ip is defined and log.ip %}
+         {% set firstIp = log.ip %}
+      {% endif %}
+   {% endfor %}
 
-	  {% if cartCreated %}
-		 <tr>
-			<td><strong>{{ 'Order Started'|t('order-lifecycle') }}</strong></td>
-			<td>{{ cartCreated|datetime('medium') }}</td>
-			<td class="light">-</td>
-		 </tr>
-	  {% endif %}
+   <div class="lifecycle-metric-cards">
+      {% if firstCartActivity and orderCompleted %}
+         <div class="lifecycle-metric-card">
+            <div class="lifecycle-metric-label">{{ 'Time to Convert'|t('order-lifecycle') }}</div>
+            <div class="lifecycle-metric-value">
+               {% set duration = orderCompleted - firstCartActivity %}
+               {% if duration > 0 %}
+                  {% set hours = (duration / 3600)|round(0, 'floor') %}
+                  {% set minutes = ((duration % 3600) / 60)|round(0, 'floor') %}
+                  {% set seconds = duration % 60 %}
+                  {% if hours > 0 %}
+                     {{ hours }}h {{ minutes }}m
+                  {% elseif minutes > 0 %}
+                     {{ minutes }}m {{ seconds }}s
+                  {% else %}
+                     {{ seconds }}s
+                  {% endif %}
+               {% else %}
+                  &lt; 1s
+               {% endif %}
+            </div>
+            <div class="lifecycle-metric-sub">{{ 'first activity → completed'|t('order-lifecycle') }}</div>
+         </div>
+      {% endif %}
 
-	  {# Time to Convert from First Cart Activity → Completed #}
-	  {% if firstCartActivity and orderCompleted %}
-		 <tr>
-			<td><strong>{{ 'Time to Convert (First Activity → Completed)'|t('order-lifecycle') }}</strong></td>
-			<td>-</td>
-			<td>
-			   {% set duration = orderCompleted - firstCartActivity %}
-			   {% if duration > 0 %}
-				  {% set hours = (duration / 3600)|round(0, 'floor') %}
-				  {% set minutes = ((duration % 3600) / 60)|round(0, 'floor') %}
-				  {% set seconds = duration % 60 %}
-				  {% if hours > 0 %}
-					 {{ hours }}h {{ minutes }}m
-				  {% elseif minutes > 0 %}
-					 {{ minutes }}m {{ seconds }}s
-				  {% else %}
-					 {{ seconds }}s
-				  {% endif %}
-			   {% else %}
-				  <span class="light">< 1s</span>
-			   {% endif %}
-			</td>
-		 </tr>
-	  {% endif %}
+      {% if checkoutStarted and orderPaid %}
+         <div class="lifecycle-metric-card">
+            <div class="lifecycle-metric-label">{{ 'Checkout Duration'|t('order-lifecycle') }}</div>
+            <div class="lifecycle-metric-value">
+               {% set duration = orderPaid - checkoutStarted %}
+               {% if duration > 0 %}
+                  {% set minutes = (duration / 60)|round(0, 'floor') %}
+                  {% set seconds = duration % 60 %}
+                  {% if minutes > 0 %}
+                     {{ minutes }}m {{ seconds }}s
+                  {% else %}
+                     {{ seconds }}s
+                  {% endif %}
+               {% else %}
+                  &lt; 1s
+               {% endif %}
+            </div>
+            <div class="lifecycle-metric-sub">{{ 'started → paid'|t('order-lifecycle') }}</div>
+         </div>
+      {% endif %}
 
-	  {# Checkout Duration (Checkout Started → Paid) #}
-	  {% if checkoutStarted and orderPaid %}
-		 <tr>
-			<td><strong>{{ 'Checkout Duration (Started → Paid)'|t('order-lifecycle') }}</strong></td>
-			<td>-</td>
-			<td>
-			   {% set duration = orderPaid - checkoutStarted %}
-			   {% if duration > 0 %}
-				  {% set minutes = (duration / 60)|round(0, 'floor') %}
-				  {% set seconds = duration % 60 %}
-				  {{ minutes }}m {{ seconds }}s
-			   {% else %}
-				  <span class="light">< 1s</span>
-			   {% endif %}
-			</td>
-		 </tr>
-	  {% endif %}
+      {% if itemsAdded > 0 or itemsRemoved > 0 %}
+         <div class="lifecycle-metric-card">
+            <div class="lifecycle-metric-label">{{ 'Cart Items'|t('order-lifecycle') }}</div>
+            <div class="lifecycle-metric-value">
+               <span class="success">{{ itemsAdded }}</span> {{ 'added'|t('order-lifecycle') }}
+            </div>
+            <div class="lifecycle-metric-sub">
+               {{ itemsRemoved }} {{ 'removed'|t('order-lifecycle') }}
+            </div>
+         </div>
+      {% endif %}
 
-	  {% if orderCompleted %}
-		 <tr>
-			<td><strong>{{ 'Order Completed'|t('order-lifecycle') }}</strong></td>
-			<td>{{ orderCompleted|datetime('medium') }}</td>
-			<td>
+      {% if order is defined %}
+         {% set previousOrders = craft.orderLifecycle.stats.getPreviousOrderCount(order) %}
+         <div class="lifecycle-metric-card">
+            <div class="lifecycle-metric-label">{{ 'Customer'|t('order-lifecycle') }}</div>
+            <div class="lifecycle-metric-value">
+               {{ previousOrders > 0 ? 'Returning'|t('order-lifecycle') : 'New'|t('order-lifecycle') }}
+            </div>
+            <div class="lifecycle-metric-sub">
+               {% if previousOrders > 0 %}
+                  {{ previousOrders }} {{ previousOrders == 1 ? 'previous order'|t('order-lifecycle') : 'previous orders'|t('order-lifecycle') }}
+               {% else %}
+                  {{ 'No previous orders'|t('order-lifecycle') }}
+               {% endif %}
+            </div>
+         </div>
+      {% endif %}
+   </div>
 
-				  <span class="light">-</span>
-
-			</td>
-		 </tr>
-	  {% endif %}
-
-	  {% if firstTransaction %}
-		 <tr>
-			<td><strong>{{ 'Successful Transaction'|t('order-lifecycle') }}</strong></td>
-			<td>{{ firstTransaction|datetime('medium') }}</td>
-			<td>
-
-				  <span class="light">-</span>
-
-			</td>
-		 </tr>
-	  {% endif %}
-
-	  {# Payment Attempts Count #}
-	  {% if paymentAttempts > 0 %}
-		 <tr>
-			<td><strong>{{ 'Payment Retries'|t('order-lifecycle') }}</strong></td>
-			<td>-</td>
-			<td>
-			   <span class="{% if paymentAttempts > 1 %}error{% endif %}">{{ paymentAttempts }}</span>
-			   {% if paymentAttempts > 1 %}
-				  <span class="light">({{ (paymentAttempts - 1) }} retries)</span>
-			   {% endif %}
-			</td>
-		 </tr>
-	  {% endif %}
-
-	  {# Items Dropped Inside Cart #}
-	  {% if itemsAdded > 0 or itemsRemoved > 0 %}
-		 <tr>
-			<td><strong>{{ 'Cart Items (Added / Removed)'|t('order-lifecycle') }}</strong></td>
-			<td>-</td>
-			<td>
-			   <span class="success">{{ itemsAdded }} added</span>
-			   {% if itemsRemoved > 0 %}
-				  / <span class="error">{{ itemsRemoved }} removed</span>
-			   {% endif %}
-			</td>
-		 </tr>
-	  {% endif %}
-
-	  {% if orderPaid %}
-		 <tr>
-			<td><strong>{{ 'Order Paid'|t('order-lifecycle') }}</strong></td>
-			<td>{{ orderPaid|datetime('medium') }}</td>
-			<td>
-			   {% if firstTransaction %}
-				  {% set duration = orderPaid - firstTransaction %}
-				  {% if duration > 0 %}
-					 {% set minutes = (duration / 60)|round(0, 'floor') %}
-					 {% set seconds = duration % 60 %}
-					 {{ minutes }}m {{ seconds }}s
-				  {% else %}
-					 <span class="light">< 1s</span>
-				  {% endif %}
-			   {% elseif cartCreated %}
-				  {% set duration = orderPaid - cartCreated %}
-				  {% if duration > 0 %}
-					 {% set hours = (duration / 3600)|round(0, 'floor') %}
-					 {% set minutes = ((duration % 3600) / 60)|round(0, 'floor') %}
-					 {{ hours }}h {{ minutes }}m
-				  {% else %}
-					 <span class="light">< 1s</span>
-				  {% endif %}
-			   {% else %}
-				  <span class="light">-</span>
-			   {% endif %}
-			</td>
-		 </tr>
-	  {% endif %}
-
-	  {# Customer Type (New vs Returning) #}
-	  {% if order is defined and order.customer is defined %}
-		 <tr>
-			<td><strong>{{ 'Customer Type'|t('order-lifecycle') }}</strong></td>
-			<td>-</td>
-			<td>
-			   {% set previousOrders = craft.orders()
-				  .customer(order.customer)
-				  .id('not ' ~ order.id)
-				  .status('not temp')
-				  .count() %}
-			   {% if previousOrders > 0 %}
-				  <span class="success">{{ 'Returning'|t('order-lifecycle') }}</span>
-				  <span class="light">({{ previousOrders }} previous {{ previousOrders == 1 ? 'order' : 'orders' }})</span>
-			   {% else %}
-				  <span class="notice">{{ 'New Customer'|t('order-lifecycle') }}</span>
-			   {% endif %}
-			</td>
-		 </tr>
-	  {% endif %}
-	  </tbody>
-   </table>
+   {% if cartCreated or orderCompleted %}
+      <div class="lifecycle-summary-bar">
+         <div class="lifecycle-summary-point">
+            <span class="lifecycle-summary-label">{{ 'Started'|t('order-lifecycle') }}</span>
+            <span class="lifecycle-summary-datetime">{{ cartCreated ? cartCreated|datetime('medium') : '-' }}</span>
+         </div>
+         <div class="lifecycle-summary-connector"></div>
+         <div class="lifecycle-summary-point">
+            <span class="lifecycle-summary-label">{{ 'Completed'|t('order-lifecycle') }}</span>
+            <span class="lifecycle-summary-datetime">{{ orderCompleted ? orderCompleted|datetime('medium') : '-' }}</span>
+         </div>
+         <div class="lifecycle-summary-origin">
+            {{ 'Origin'|t('order-lifecycle') }}: {{ 'Web'|t('order-lifecycle') }}{% if firstIp %} · {{ 'IP'|t('order-lifecycle') }} {{ firstIp }}{% endif %}
+         </div>
+      </div>
+   {% endif %}
 </div>

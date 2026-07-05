@@ -4,7 +4,7 @@
    
    <p>{{ 'Export order lifecycle events as CSV for analysis in BI tools, spreadsheets, or data warehouses.'|t('order-lifecycle') }}</p>
    
-   <form method="post" action="{{ actionUrl('order-lifecycle/export/csv') }}" target="_blank">
+   <form id="ol-export-form" method="post" action="{{ actionUrl('order-lifecycle/export/csv') }}" target="_blank">
 	  {{ csrfInput() }}
 	  
 	  <div class="field">
@@ -46,22 +46,14 @@
 		 value: now,
 	  }) }}
 	  <hr>
-	  <div class="field">
-		 <div class="heading">
-			<label for="orderId">{{ 'Order ID (Optional)'|t('order-lifecycle') }}</label>
-			<div class="instructions">
-			<p>{{ 'Leave empty to export all orders'|t('order-lifecycle') }}</p>
-			</div>
-		 </div>
-		 <div class="input">
-			{{ forms.text({
-			   type: 'number',
-			   id: 'orderId',
-			   name: 'orderId',
-			   placeholder: 'e.g. 123',
-			}) }}
-		 </div>
-	  </div>
+	  {{ forms.textField({
+		 label: 'Order ID (Optional)'|t('order-lifecycle'),
+		 instructions: 'Leave empty to export all orders'|t('order-lifecycle'),
+		 type: 'number',
+		 id: 'orderId',
+		 name: 'orderId',
+		 placeholder: 'e.g. 123',
+	  }) }}
 	  <hr>
 	  <fieldset class="field">
 		 <div class="heading">
@@ -74,9 +66,9 @@
 
 			<div id="event-types-list">
 
-			   <a id="select-all-events">
+			   <button type="button" id="select-all-events" class="btn small">
 				  {{ 'Select All'|t('order-lifecycle') }}
-			   </a>
+			   </button>
 
 			   {% for eventType in eventTypes %}
 				  <div>
@@ -293,9 +285,10 @@
 	  
 	  <div class="field">
 		 <div class="buttons">
-			<button type="submit" class="btn submit">
+			<button type="submit" id="ol-export-submit" class="btn submit">
 			   {{ 'Export CSV'|t('order-lifecycle') }}
 			</button>
+			<span id="ol-export-spinner" class="spinner hidden"></span>
 		 </div>
 	  </div>
    </form>

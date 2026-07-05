@@ -28,3 +28,50 @@ describe('Formatter::priceChange()', function () {
             ->and($result)->toContain('2');
     });
 });
+
+describe('Formatter::couponChange()', function () {
+    it('describes a coupon being applied', function () {
+        expect(Formatter::couponChange(null, 'SAVE10'))->toContain('SAVE10');
+    });
+
+    it('describes a coupon being removed', function () {
+        expect(Formatter::couponChange('SAVE10', null))->toContain('SAVE10');
+    });
+
+    it('returns null when the coupon is unchanged', function () {
+        expect(Formatter::couponChange('SAVE10', 'SAVE10'))->toBeNull();
+    });
+
+    it('escapes a coupon code containing HTML', function () {
+        expect(Formatter::couponChange(null, '<b>x</b>'))->not->toContain('<b>');
+    });
+});
+
+describe('Formatter::statusChange()', function () {
+    it('describes a new status', function () {
+        expect(Formatter::statusChange('new', 'shipped'))->toContain('shipped');
+    });
+
+    it('returns null when the status is cleared or unchanged', function () {
+        expect(Formatter::statusChange('shipped', null))->toBeNull()
+            ->and(Formatter::statusChange('shipped', 'shipped'))->toBeNull();
+    });
+});
+
+describe('Formatter field labels', function () {
+    it('maps a known order field to its translated label', function () {
+        expect(Formatter::orderFieldLabel('statusHandle'))->toBe('Order Status');
+    });
+
+    it('humanises an unrecognised order field name', function () {
+        expect(Formatter::orderFieldLabel('someUnknownField'))->toBe('Some Unknown Field');
+    });
+
+    it('maps a known address field to its translated label', function () {
+        expect(Formatter::addressFieldLabel('addressLine1'))->toBe('Address');
+    });
+
+    it('humanises an unrecognised address field name', function () {
+        expect(Formatter::addressFieldLabel('someUnknownField'))->toBe('Some Unknown Field');
+    });
+});

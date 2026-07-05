@@ -12,7 +12,6 @@ use Exception;
 use johnhenry\orderlifecycle\assets\OrderLifecycleAsset;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
-use johnhenry\orderlifecycle\widgets\AiInsightsWidget;
 use yii\base\InvalidConfigException;
 use yii\web\ForbiddenHttpException;
 use yii\web\Response;
@@ -86,8 +85,7 @@ class DashboardController extends Controller
     {
         $this->requirePermission('order-lifecycle:generateInsights');
 
-        $widget = new AiInsightsWidget();
-        $saved = $widget->loadSavedInsights();
+        $saved = OrderLifecycle::getInstance()->getAiInsights()->getSavedStoreInsights();
         $hasApiKey = (bool)OrderLifecycle::$plugin->settings->getAnthropicApiKey();
 
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);

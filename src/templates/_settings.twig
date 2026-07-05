@@ -1,4 +1,4 @@
-{% extends '/_layouts/cp' %}
+{% extends '_layouts/cp' %}
 
 {% import '_includes/forms.twig' as forms %}
 
@@ -33,7 +33,7 @@
    <div id="general">
       {{ forms.lightswitchField({
          label: 'Show Lifecycle Stats'|t('order-lifecycle'),
-         instructions: 'Display the lifecycle statistics table in the order field showing key metrics like Order Started, Order Completed, First Transaction, and Order Paid.'|t('order-lifecycle'),
+         instructions: 'Display the lifecycle summary cards in the order field showing the order\'s key conversion metrics.'|t('order-lifecycle'),
          name: 'settings[showLifecycleStats]',
          on: settings.showLifecycleStats,
          errors: settings.getErrors('showLifecycleStats'),
@@ -166,8 +166,8 @@
 
       {{ forms.lightswitchField({
          label: "Log All Payment Transactions"|t('order-lifecycle'),
-         instructions: "Track all payment transaction details (may create many log entries)."|t('order-lifecycle'),
-         warning: "This may generate a large number of log entries."|t('order-lifecycle'),
+         instructions: "Track every individual payment transaction state change, not just the summary events above."|t('order-lifecycle'),
+         warning: "This may generate a large number of log entries - leave off unless you're actively debugging a gateway."|t('order-lifecycle'),
          name: 'settings[logPaymentTransactions]',
          on: settings.logPaymentTransactions,
          errors: settings.getErrors('logPaymentTransactions'),
@@ -205,7 +205,7 @@
    <h2>{{ "Log Maintenance"|t('order-lifecycle') }}</h2>
 
    {{ forms.textField({
-      label: "Auto-Prune Logs After Days"|t('order-lifecycle'),
+      label: "Auto-Prune Logs After (Days)"|t('order-lifecycle'),
       instructions: "Automatically delete logs older than this many days. Set to 0 to disable auto-pruning. Recommended: 90-180 days."|t('order-lifecycle'),
       id: 'autoPruneLogs',
       name: 'autoPruneLogs',
@@ -247,6 +247,19 @@
       <h2>{{ "AI Prompt Customisation"|t('order-lifecycle') }}</h2>
 
       <p class="light">{{ "Customise the prompts sent to Claude. Leave blank to use the built-in defaults. Use {placeholder} tokens to insert live data - see the documentation for the full list of available tokens."|t('order-lifecycle') }}</p>
+
+      {{ forms.selectField({
+         label: "Per-Order Insights Style"|t('order-lifecycle'),
+         instructions: "Structured shows a priority action callout plus labeled ACTION / INFO / GOOD insight cards. Narrative shows a plain bullet-point summary."|t('order-lifecycle'),
+         id: 'orderInsightsStyle',
+         name: 'settings[orderInsightsStyle]',
+         value: settings.orderInsightsStyle,
+         options: [
+            { label: "Structured (priority action + labeled insights)"|t('order-lifecycle'), value: 'structured' },
+            { label: "Narrative (plain bullet summary)"|t('order-lifecycle'), value: 'narrative' },
+         ],
+         errors: settings.getErrors('orderInsightsStyle'),
+      }) }}
 
       {{ forms.textareaField({
          label: "Per-Order Insights Prompt"|t('order-lifecycle'),

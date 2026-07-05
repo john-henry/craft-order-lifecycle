@@ -17,7 +17,7 @@ use Craft;
  * @author John Henry Donovan
  * @since 1.0.0
  */
-enum EventType: string
+enum EventType : string
 {
     // =========================================================================
     // Cases
@@ -154,6 +154,25 @@ enum EventType: string
             self::CHECKOUT_STARTED => 'checkout',
             self::AI_INSIGHTS => 'ai',
         };
+    }
+
+    /**
+     * Returns the timeline filter pill this event type is shown under.
+     *
+     * Mirrors {@see getCategory()}'s taxonomy one-to-one, with a single fold:
+     * checkout events show under the Cart pill rather than getting their own,
+     * since a dedicated "Checkout" pill would only ever contain one event type.
+     *
+     * @return string The filter pill handle (cart, lineItems, coupons, addresses,
+     *     customer, shipping, order, payment, email, or ai).
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function getFilterPill(): string
+    {
+        $category = $this->getCategory();
+
+        return $category === 'checkout' ? 'cart' : $category;
     }
 
     /**

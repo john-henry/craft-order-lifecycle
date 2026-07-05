@@ -13,6 +13,7 @@ use craft\commerce\elements\Order;
 use craft\commerce\Plugin as Commerce;
 use johnhenry\orderlifecycle\assets\OrderLifecycleAsset;
 use johnhenry\orderlifecycle\OrderLifecycle;
+use Throwable;
 
 /**
  * Order Lifecycle field type.
@@ -62,7 +63,7 @@ class OrderLifecycleField extends Field
      */
     public static function icon(): string
     {
-        return 'clock';
+        return dirname(__DIR__) . '/icon-mask.svg';
     }
 
     /**
@@ -80,76 +81,6 @@ class OrderLifecycleField extends Field
     }
 
     // =========================================================================
-    // Public Methods
-    // =========================================================================
-
-    /**
-     * @inheritdoc
-     *
-     * @param mixed $value The field value.
-     * @param ElementInterface|null $element The element the field is attached to.
-     * @return string The rendered input HTML.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public function getInputHtml(mixed $value, ?ElementInterface $element = null): string
-    {
-        if (!class_exists(Order::class)) {
-            return '<div class="readable">
-                <blockquote class="note">
-                    <p>' . Craft::t('order-lifecycle', 'Craft Commerce must be installed to use this field.') . '</p>
-                </blockquote>
-            </div>';
-        }
-
-        if ($element === null) {
-            return '<div class="readable">
-                <blockquote class="note">
-                    <p>' . Craft::t('order-lifecycle', 'This field can only be used with saved orders.') . '</p>
-                </blockquote>
-            </div>';
-        }
-
-        if (!$element instanceof Order) {
-            return '<div class="readable">
-                <blockquote class="note warning">
-                    <p>' . Craft::t('order-lifecycle', 'This field can only be added to Commerce Order elements.') . '</p>
-                </blockquote>
-            </div>';
-        }
-
-        if (!$element->id) {
-            return '<div class="readable">
-                <blockquote class="note">
-                    <p>' . Craft::t('order-lifecycle', 'Order lifecycle events will appear after the order is saved.') . '</p>
-                </blockquote>
-            </div>';
-        }
-
-        // Register the asset bundle
-        Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
-
-        $logs = OrderLifecycle::getInstance()->logger->getLogsForOrder(
-            $element->id
-        );
-
-        // Get all order statuses
-        $statuses = Commerce::getInstance()->getOrderStatuses()->getAllOrderStatuses();
-
-
-        return Craft::$app->getView()->renderTemplate(
-            'order-lifecycle/_field-input',
-            [
-                'order' => $element,
-                'logs' => $logs,
-                'field' => $this,
-                'statuses' => $statuses,
-                'transactions' => $element->getTransactions(),
-            ]
-        );
-    }
-
-    // =========================================================================
     // Protected Methods
     // =========================================================================
 
@@ -160,11 +91,65 @@ class OrderLifecycleField extends Field
      * @param ElementInterface|null $element The element the field is attached to.
      * @param bool $inline Whether the field is being rendered inline.
      * @return string The rendered input HTML.
+     * @throws Throwable If the field template cannot be rendered.
      * @author John Henry Donovan
      * @since 1.0.0
      */
     protected function inputHtml(mixed $value, ?ElementInterface $element, bool $inline): string
     {
-        return $this->getInputHtml($value, $element);
+        if (!class_exists(Order::class)) {
+            return $this->_note(Craft::t('order-lifecycle', 'Craft Commerce must be installed to use this field.'));
+        }
+
+        if ($element === null) {
+            return $this->_note(Craft::t('order-lifecycle', 'This field can only be used with saved orders.'));
+        }
+
+        if (!$element instanceof Order) {
+            return $this->_note(
+                Craft::t('order-lifecycle', 'This field can only be added to Commerce Order elements.'),
+                'warning'
+            );
+        }
+
+        if (!$element->id) {
+            return $this->_note(Craft::t('order-lifecycle', 'Order lifecycle events will appear after the order is saved.'));
+        }
+
+        Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
+
+        $logger = OrderLifecycle::getInstance()->getLogger();
+        $logs = $logger->getLogsForOrder($element->id);
+        $timeline = $logger->getTimelineForOrder($element->id);
+        $statuses = Commerce::getInstance()->getOrderStatuses()->getAllOrderStatuses();
+
+        return Craft::$app->getView()->renderTemplate('order-lifecycle/_field-input', [
+            'order' => $element,
+            'logs' => $logs,
+            'timeline' => $timeline,
+            'field' => $this,
+            'statuses' => $statuses,
+            'transactions' => $element->getTransactions(),
+        ]);
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * Renders a read-only CP note blockquote.
+     *
+     * @param string $message The note message.
+     * @param string|null $modifier An optional blockquote modifier class (e.g. warning).
+     * @return string The note HTML.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _note(string $message, ?string $modifier = null): string
+    {
+        $class = 'note' . ($modifier !== null ? ' ' . $modifier : '');
+
+        return '<div class="readable"><blockquote class="' . $class . '"><p>' . $message . '</p></blockquote></div>';
     }
 }

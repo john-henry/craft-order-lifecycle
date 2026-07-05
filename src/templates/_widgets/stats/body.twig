@@ -1,95 +1,10 @@
 <div class="order-lifecycle-stats">
 
+   {% include 'order-lifecycle/_includes/stat-grid' with {
+      stats: stats,
+      showAllTimeNote: false,
+      scopeInHeader: true,
+      showTopEvents: showTopEvents,
+   } only %}
 
-   <div class="ol-stat-grid">
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Total Events'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.totalLogs|number_format }}</div>
-		 <div class="ol-stat-sub">{{ 'Across {count} orders'|t('order-lifecycle', {count: stats.uniqueOrders}) }}</div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Avg. Events/Order'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.avgLogsPerOrder }}</div>
-		 <div class="ol-stat-sub">{{ 'Per order lifecycle'|t('order-lifecycle') }}</div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Conversion Rate'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.conversionRate }}%</div>
-		 <div class="ol-stat-sub">
-			{{ '{completed} of {created} carts'|t('order-lifecycle', {
-			   completed: stats.ordersCompleted,
-			   created: stats.cartsCreated
-			}) }}
-		 </div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Avg. Time to Complete'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.avgTimeToCompletion ?: '-' }}</div>
-		 <div class="ol-stat-sub">{{ 'From cart to order'|t('order-lifecycle') }}</div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Avg. Checkout Time'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.avgCheckoutDuration ?: '-' }}</div>
-		 <div class="ol-stat-sub">{{ 'From start to payment'|t('order-lifecycle') }}</div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Abandonment Rate'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.abandonmentRate }}%</div>
-		 <div class="ol-stat-sub">{{ '{count} abandoned carts'|t('order-lifecycle', {count: stats.abandonedCarts}) }}</div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Avg. Payment Retries'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.avgPaymentAttempts ?: '-' }}</div>
-		 <div class="ol-stat-sub">{{ 'Per completed order'|t('order-lifecycle') }}</div>
-	  </div>
-
-	  <div class="ol-stat-card">
-		 <div class="ol-stat-label">{{ 'Returning Customers'|t('order-lifecycle') }}</div>
-		 <div class="ol-stat-value">{{ stats.returningCustomerRate }}%</div>
-		 <div class="ol-stat-sub">{{ 'Of completed orders'|t('order-lifecycle') }}</div>
-	  </div>
-
-	  {% if stats.avgCartValue %}
-		 <div class="ol-stat-card">
-			<div class="ol-stat-label">{{ 'Avg. Cart Value'|t('order-lifecycle') }}</div>
-			<div class="ol-stat-value">{{ stats.avgCartValue|currency }}</div>
-			<div class="ol-stat-sub">{{ 'For completed orders'|t('order-lifecycle') }}</div>
-		 </div>
-	  {% endif %}
-
-	  {% if stats.emailsSent or stats.emailsFailed %}
-		 <div class="ol-stat-card">
-			<div class="ol-stat-label">{{ 'Email Success Rate'|t('order-lifecycle') }}</div>
-			<div class="ol-stat-value">{{ stats.emailSuccessRate }}%</div>
-			<div class="ol-stat-sub">
-			   {{ '{sent} sent, {failed} failed'|t('order-lifecycle', {
-				  sent: stats.emailsSent,
-				  failed: stats.emailsFailed
-			   }) }}
-			</div>
-		 </div>
-	  {% endif %}
-   </div>
-
-   {% if stats.topEventTypes|length > 0 %}
-	  <div class="ol-events-list">
-		 <div class="ol-events-title">{{ 'Top Events'|t('order-lifecycle') }}</div>
-		 {% for event in stats.topEventTypes %}
-			<div class="ol-event-item">
-			   <span class="ol-event-name">{{ event.type }}</span>
-			   <span class="ol-event-count">{{ event.count|number_format }}</span>
-			</div>
-		 {% endfor %}
-	  </div>
-   {% endif %}
-
-   <div class="ol-period-note">
-	  {{ 'Statistics for the last {days} days'|t('order-lifecycle', {days: stats.days}) }}
-   </div>
 </div>

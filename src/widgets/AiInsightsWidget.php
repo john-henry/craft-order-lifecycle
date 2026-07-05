@@ -14,8 +14,10 @@ use johnhenry\orderlifecycle\OrderLifecycle;
 /**
  * AI Insights dashboard widget.
  *
- * Renders the store-wide AI insights panel on the CP dashboard and manages the
- * on-disk storage of the most recently generated insights.
+ * Renders the store-wide AI insights panel on the CP dashboard. The time
+ * period is chosen inline in the widget body rather than via widget settings,
+ * so this widget has none - the panel's own Period selector is the only place
+ * that value is configured.
  *
  * @author John Henry Donovan
  * @since 1.0.0
@@ -27,7 +29,7 @@ class AiInsightsWidget extends Widget
     // =========================================================================
 
     /**
-     * @var int The number of days to analyse.
+     * @var int The default number of days to analyse before the Period selector is changed.
      */
     public int $days = 30;
 
@@ -50,13 +52,13 @@ class AiInsightsWidget extends Widget
     /**
      * @inheritdoc
      *
-     * @return string|null The widget icon path.
+     * @return string The widget icon path.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public static function icon(): ?string
+    public static function icon(): string
     {
-        return Craft::getAlias('@johnhenry/orderlifecycle/icon.svg');
+        return dirname(__DIR__) . '/icon-mask.svg';
     }
 
     /**
@@ -71,22 +73,6 @@ class AiInsightsWidget extends Widget
         return 3;
     }
 
-    /**
-     * Returns the path to the file storing the most recent store insights.
-     *
-     * @return string The absolute path to the storage file.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public static function storageFile(): string
-    {
-        $dir = Craft::$app->getPath()->getStoragePath() . DIRECTORY_SEPARATOR . 'order-lifecycle';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-        return $dir . DIRECTORY_SEPARATOR . 'store-insights.json';
-    }
-
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -94,15 +80,13 @@ class AiInsightsWidget extends Widget
     /**
      * @inheritdoc
      *
-     * @return string|null The rendered settings HTML.
+     * @return string|null The widget subtitle.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public function getSettingsHtml(): ?string
+    public function getSubtitle(): ?string
     {
-        return Craft::$app->getView()->renderTemplate('order-lifecycle/_widgets/ai-insights/settings', [
-            'widget' => $this,
-        ]);
+        return Craft::t('order-lifecycle', "Summarize your store's conversion, payments and anomalies with AI.");
     }
 
     /**
@@ -122,28 +106,11 @@ class AiInsightsWidget extends Widget
 
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
 
-        $saved = $this->loadSavedInsights();
+        $saved = OrderLifecycle::getInstance()->getAiInsights()->getSavedStoreInsights();
 
         return Craft::$app->getView()->renderTemplate('order-lifecycle/_widgets/ai-insights/body', [
             'widget' => $this,
             'saved' => $saved,
         ]);
-    }
-
-    /**
-     * Loads the most recently saved store insights from disk.
-     *
-     * @return array|null The decoded insights, or null if none are stored.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public function loadSavedInsights(): ?array
-    {
-        $file = self::storageFile();
-        if (!file_exists($file)) {
-            return null;
-        }
-        $data = json_decode(file_get_contents($file), true);
-        return is_array($data) ? $data : null;
     }
 }

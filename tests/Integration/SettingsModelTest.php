@@ -114,3 +114,42 @@ describe('SettingsModel boolean field validation', function () {
         expect($settings->validate(['logPaymentTransactions']))->toBeTrue();
     });
 });
+
+// ---------------------------------------------------------------------------
+// String field validation
+// ---------------------------------------------------------------------------
+
+describe('SettingsModel string field validation', function () {
+    it('passes for a normal Anthropic API key reference', function () {
+        $settings = new SettingsModel(['anthropicApiKey' => '$ANTHROPIC_API_KEY']);
+
+        expect($settings->validate(['anthropicApiKey']))->toBeTrue();
+    });
+
+    it('fails when anthropicApiKey exceeds the max length', function () {
+        $settings = new SettingsModel(['anthropicApiKey' => str_repeat('a', 256)]);
+
+        expect($settings->validate(['anthropicApiKey']))->toBeFalse()
+            ->and($settings->getErrors('anthropicApiKey'))->not->toBeEmpty();
+    });
+
+    it('passes for a normal-length order insights prompt', function () {
+        $settings = new SettingsModel(['orderInsightsPrompt' => 'Summarize this order in two sentences.']);
+
+        expect($settings->validate(['orderInsightsPrompt']))->toBeTrue();
+    });
+
+    it('fails when orderInsightsPrompt exceeds the max length', function () {
+        $settings = new SettingsModel(['orderInsightsPrompt' => str_repeat('a', 5001)]);
+
+        expect($settings->validate(['orderInsightsPrompt']))->toBeFalse()
+            ->and($settings->getErrors('orderInsightsPrompt'))->not->toBeEmpty();
+    });
+
+    it('fails when storeInsightsPrompt exceeds the max length', function () {
+        $settings = new SettingsModel(['storeInsightsPrompt' => str_repeat('a', 5001)]);
+
+        expect($settings->validate(['storeInsightsPrompt']))->toBeFalse()
+            ->and($settings->getErrors('storeInsightsPrompt'))->not->toBeEmpty();
+    });
+});

@@ -25,7 +25,6 @@
             $('#exportColumnsList tr').each(function(index) {
                 $(this).find('.order-input').val(index);
             });
-            console.log('Export columns order updated');
         }
 
         // Date preset buttons
@@ -93,6 +92,27 @@
             // Update the date fields
             updateDateTimeField('dateFrom', dateFrom);
             updateDateTimeField('dateTo', dateTo);
+        });
+
+        // Disable the submit button while the export downloads to prevent
+        // duplicate submissions. The form opens in a new tab (target="_blank"),
+        // so the page never navigates away - re-enable after a fixed delay
+        // rather than waiting for an unreachable "response received" signal.
+        $('#ol-export-form').on('submit', function() {
+            const $btn = $('#ol-export-submit');
+            const $spinner = $('#ol-export-spinner');
+
+            if ($btn.prop('disabled')) {
+                return false;
+            }
+
+            $btn.prop('disabled', true);
+            $spinner.removeClass('hidden');
+
+            setTimeout(function() {
+                $btn.prop('disabled', false);
+                $spinner.addClass('hidden');
+            }, 3000);
         });
 
         // Select all events checkbox functionality

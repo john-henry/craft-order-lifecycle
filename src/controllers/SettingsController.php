@@ -52,16 +52,6 @@ class SettingsController extends Controller
 
         $settings = OrderLifecycle::$plugin->settings;
 
-        // Get site options
-        $siteOptions = [];
-
-        foreach (Craft::$app->getSites()->getAllSites() as $site) {
-            $siteOptions[] = [
-                'value' => $site->id,
-                'label' => $site->name,
-            ];
-        }
-
         return $this->renderTemplate('order-lifecycle/_settings', [
             'settings' => $settings,
             'config' => Craft::$app->getConfig()->getConfigFromFile('order-lifecycle'),
@@ -82,21 +72,41 @@ class SettingsController extends Controller
     public function actionSave(): ?Response
     {
         $this->requirePostRequest();
-        $this->requireAdmin();
+        $this->requireAdmin(requireAdminChanges: true);
 
         $request = Craft::$app->getRequest();
 
-        $postedSettings = $request->getBodyParam('settings', []);
-
         $settings = OrderLifecycle::$plugin->settings;
-        $settings->setAttributes($postedSettings, false);
-        $settings->anthropicApiKey = $this->request->getBodyParam('anthropicApiKey', $settings->anthropicApiKey);
 
-        // Validate the settings
+        $settings->logLineItems = (bool)$request->getBodyParam('settings[logLineItems]', $settings->logLineItems);
+        $settings->logStatusChanges = (bool)$request->getBodyParam('settings[logStatusChanges]', $settings->logStatusChanges);
+        $settings->logOrderComplete = (bool)$request->getBodyParam('settings[logOrderComplete]', $settings->logOrderComplete);
+        $settings->logOrderPaid = (bool)$request->getBodyParam('settings[logOrderPaid]', $settings->logOrderPaid);
+        $settings->logEmailSent = (bool)$request->getBodyParam('settings[logEmailSent]', $settings->logEmailSent);
+        $settings->showLifecycleStats = (bool)$request->getBodyParam('settings[showLifecycleStats]', $settings->showLifecycleStats);
+        $settings->logCouponChanges = (bool)$request->getBodyParam('settings[logCouponChanges]', $settings->logCouponChanges);
+        $settings->logAddressChanges = (bool)$request->getBodyParam('settings[logAddressChanges]', $settings->logAddressChanges);
+        $settings->logCustomerChanges = (bool)$request->getBodyParam('settings[logCustomerChanges]', $settings->logCustomerChanges);
+        $settings->logShippingMethodChanges = (bool)$request->getBodyParam('settings[logShippingMethodChanges]', $settings->logShippingMethodChanges);
+        $settings->logPaymentAttempts = (bool)$request->getBodyParam('settings[logPaymentAttempts]', $settings->logPaymentAttempts);
+        $settings->logPaymentAuthorized = (bool)$request->getBodyParam('settings[logPaymentAuthorized]', $settings->logPaymentAuthorized);
+        $settings->logPaymentCaptured = (bool)$request->getBodyParam('settings[logPaymentCaptured]', $settings->logPaymentCaptured);
+        $settings->logPaymentRefunded = (bool)$request->getBodyParam('settings[logPaymentRefunded]', $settings->logPaymentRefunded);
+        $settings->logPaymentTransactions = (bool)$request->getBodyParam('settings[logPaymentTransactions]', $settings->logPaymentTransactions);
+        $settings->collectUserIp = (bool)$request->getBodyParam('settings[collectUserIp]', $settings->collectUserIp);
+        $settings->collectUserId = (bool)$request->getBodyParam('settings[collectUserId]', $settings->collectUserId);
+        $settings->asyncLogging = (bool)$request->getBodyParam('settings[asyncLogging]', $settings->asyncLogging);
+        $settings->orderInsightsStyle = (string)$request->getBodyParam('settings[orderInsightsStyle]', $settings->orderInsightsStyle);
+        $settings->orderInsightsPrompt = (string)$request->getBodyParam('settings[orderInsightsPrompt]', $settings->orderInsightsPrompt);
+        $settings->storeInsightsPrompt = (string)$request->getBodyParam('settings[storeInsightsPrompt]', $settings->storeInsightsPrompt);
+
+        // these two are posted as top-level fields, not nested under settings[]
+        $settings->autoPruneLogs = (int)$request->getBodyParam('autoPruneLogs', $settings->autoPruneLogs);
+        $settings->anthropicApiKey = (string)$request->getBodyParam('anthropicApiKey', $settings->anthropicApiKey);
+
         if (!$settings->validate()) {
             Craft::$app->getSession()->setError(Craft::t('order-lifecycle', 'Couldn\'t save plugin settings.'));
 
-            // Send the settings back to the template
             return $this->asModelFailure(
                 $settings,
                 Craft::t('order-lifecycle', 'Couldn\'t save plugin settings.'),

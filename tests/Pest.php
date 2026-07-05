@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Unit tests run without a Craft application instance — any test calling
+ * Unit tests run without a Craft application instance: any test calling
  * Craft::$app or Craft::t() will fail here. For integration tests that need
  * a real Craft + Commerce context (e.g. OrderLifecycleLogger), install
  * markhuot/craft-pest-core in the parent Craft project and run:

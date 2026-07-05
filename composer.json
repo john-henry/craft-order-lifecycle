@@ -1,8 +1,8 @@
 {
   "name": "johnhenry/craft-order-lifecycle",
-  "description": "Order Lifecycle logs and timeline for Craft Commerce",
+  "description": "A full event timeline, store analytics and AI insights for every Craft Commerce order.",
   "type": "craft-plugin",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0",
   "keywords": [
     "craft",
     "cms",
@@ -17,7 +17,7 @@
       "homepage": "https://johnhenry.ie"
     }
   ],
-  "homepage": "https://plugins.johnhenry.ie/order-lifecycle",
+  "homepage": "https://johnhenry.ie/plugins/order-lifecycle/",
   "require": {
     "php": "^8.2 || ^8.3 || ^8.4",
     "craftcms/cms": "^5.0",
@@ -47,7 +47,7 @@
     "sort-packages": true
   },
   "support": {
-    "docs": "https://plugins.johnhenry.ie/order-lifecycle",
+    "docs": "https://johnhenry.ie/plugins/order-lifecycle/",
     "source": "https://github.com/john-henry/craft-order-lifecycle",
     "issues": "https://github.com/john-henry/craft-order-lifecycle/issues"
   },
@@ -56,8 +56,8 @@
     "handle": "order-lifecycle",
     "developer": "John Henry",
     "developerUrl": "https://johnhenry.ie",
-    "documentationUrl": "https://plugins.johnhenry.ie/order-lifecycle/",
-    "changelogUrl": "https://github.com/john-henry/craft-order-lifecycle/blob/craft-5-beta/CHANGELOG.md",
+    "documentationUrl": "https://johnhenry.ie/plugins/order-lifecycle/",
+    "changelogUrl": "https://github.com/john-henry/craft-order-lifecycle/blob/craft-5/CHANGELOG.md",
     "class": "johnhenry\\orderlifecycle\\OrderLifecycle"
   }
 }

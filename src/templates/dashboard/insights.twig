@@ -55,14 +55,16 @@
         <div class="ol-ai-widget-actions">
             <div class="ol-ai-dashboard-period">
                 <label for="ol-ai-days-select">{{ 'Period'|t('order-lifecycle') }}</label>
-                <select id="ol-ai-days-select" class="select" onchange="this.closest('.ol-ai-widget').dataset.days = this.value">
-                    {% for d in [7, 14, 30, 60, 90] %}
-                        <option value="{{ d }}"{% if d == 30 %} selected{% endif %}>
-                            {{ d ~ ' ' ~ 'days'|t('order-lifecycle') }}
-                        </option>
-                    {% endfor %}
-                    <option value="0">{{ 'All time'|t('order-lifecycle') }}</option>
-                </select>
+                <div class="select">
+                    <select id="ol-ai-days-select">
+                        {% for d in [7, 14, 30, 60, 90] %}
+                            <option value="{{ d }}"{% if d == 30 %} selected{% endif %}>
+                                {{ d ~ ' ' ~ 'days'|t('order-lifecycle') }}
+                            </option>
+                        {% endfor %}
+                        <option value="0">{{ 'All time'|t('order-lifecycle') }}</option>
+                    </select>
+                </div>
             </div>
 
             <button type="button" class="btn btn-ai ol-ai-widget-btn">
@@ -72,7 +74,7 @@
             <span class="ol-ai-widget-spinner spinner hidden"></span>
         </div>
 
-        <div class="ol-ai-widget-error hidden"></div>
+        <div class="ol-ai-widget-error hidden" role="alert"></div>
 
     </div>
 {% endif %}

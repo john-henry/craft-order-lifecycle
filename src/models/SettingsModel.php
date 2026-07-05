@@ -127,6 +127,11 @@ class SettingsModel extends Model
     public string $anthropicApiKey = '';
 
     /**
+     * @var string The presentation style for per-order AI insights ('structured' or 'narrative').
+     */
+    public string $orderInsightsStyle = 'structured';
+
+    /**
      * @var string An optional custom prompt template for per-order AI insights.
      */
     public string $orderInsightsPrompt = '';
@@ -157,6 +162,9 @@ class SettingsModel extends Model
                 'logPaymentTransactions', 'collectUserIp', 'collectUserId', 'asyncLogging', ], 'boolean'],
             ['autoPruneLogs', 'integer', 'min' => 0, 'max' => 365],
             ['autoPruneLogs', 'required'],
+            ['anthropicApiKey', 'string', 'max' => 255],
+            ['orderInsightsStyle', 'in', 'range' => ['structured', 'narrative']],
+            [['orderInsightsPrompt', 'storeInsightsPrompt'], 'string', 'max' => 5000],
         ];
     }
 
@@ -189,6 +197,7 @@ class SettingsModel extends Model
             'collectUserId' => Craft::t('order-lifecycle', 'Collect User ID'),
             'asyncLogging' => Craft::t('order-lifecycle', 'Async Queue Logging'),
             'autoPruneLogs' => Craft::t('order-lifecycle', 'Auto-Prune Logs After (Days)'),
+            'orderInsightsStyle' => Craft::t('order-lifecycle', 'Per-Order Insights Style'),
         ];
     }
 

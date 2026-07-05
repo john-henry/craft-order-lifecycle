@@ -1,0 +1,154 @@
+{#
+ # Shared stat-grid partial used by the dashboard overview page and the
+ # Order Lifecycle Stats widget. Expects:
+ #   stats            - the array returned by StatsService::getStats()
+ #   showAllTimeNote  - bool, whether the period note distinguishes "all time"
+ #   scopeInHeader    - bool, whether the order-count scope ("N orders") is
+ #                      already shown by the surrounding chrome (the widget's
+ #                      subtitle), so the Total Events card's caption stays
+ #                      empty instead of repeating it. Defaults to false.
+ #   showTopEvents    - bool, whether to show the "Top Events" list below the
+ #                      stat grid. Defaults to true.
+ #}
+{% import _self as macros %}
+{% set scopeInHeader = scopeInHeader ?? false %}
+{% set showTopEvents = showTopEvents ?? true %}
+
+{% macro trend(delta, upIsGood) %}{% if delta is not null %}{% set abs = delta|abs %}{% if abs < 1 %}<span class="ol-trend-chip ol-trend-neutral">→ &lt;1%</span>{% else %}{% set isGood = (delta > 0 and upIsGood) or (delta < 0 and not upIsGood) %}<span class="ol-trend-chip {{ isGood ? 'ol-trend-up' : 'ol-trend-down' }}">{{ delta > 0 ? '↑' : '↓' }} {{ abs }}%</span>{% endif %}{% endif %}{% endmacro %}
+
+{# Only highlight when a metric is genuinely notable - everything else stays neutral so these pop #}
+{% set conversionModifier = stats.conversionRate >= 50 ? 'good' : null %}
+{% set abandonmentModifier = stats.abandonmentRate >= 50 ? 'bad' : (stats.abandonmentRate >= 30 ? 'warning' : null) %}
+
+{# Narrative order: volume → conversion → timing → payment/customer → (optional) cart value/email #}
+{% set cards = [
+    {
+        label: 'Total Events'|t('order-lifecycle'),
+        value: stats.totalLogs|number_format,
+        caption: scopeInHeader ? '' : 'Across {count} orders'|t('order-lifecycle', {count: stats.uniqueOrders}),
+        trend: stats.trends.totalLogs ?? null,
+        trendGood: true,
+    },
+    {
+        label: 'Events / Order'|t('order-lifecycle'),
+        value: stats.avgLogsPerOrder,
+        caption: 'Average'|t('order-lifecycle'),
+        trend: null,
+        trendGood: true,
+    },
+    {
+        label: 'Conversion'|t('order-lifecycle'),
+        value: stats.conversionRate ~ '%',
+        caption: '{completed} of {created} carts'|t('order-lifecycle', {
+            completed: stats.ordersCompleted,
+            created: stats.cartsCreated,
+        }),
+        trend: stats.trends.conversionRate ?? null,
+        trendGood: true,
+        modifier: conversionModifier,
+    },
+    {
+        label: 'Abandonment'|t('order-lifecycle'),
+        value: stats.abandonmentRate ~ '%',
+        caption: stats.abandonedCarts == 1
+            ? '1 abandoned cart'|t('order-lifecycle')
+            : '{count} abandoned carts'|t('order-lifecycle', {count: stats.abandonedCarts}),
+        trend: stats.trends.abandonmentRate ?? null,
+        trendGood: false,
+        modifier: abandonmentModifier,
+    },
+    {
+        label: 'Avg. Checkout'|t('order-lifecycle'),
+        value: stats.avgCheckoutDuration ?: '-',
+        caption: 'Start → payment'|t('order-lifecycle'),
+        trend: null,
+        trendGood: true,
+    },
+    {
+        label: 'Avg. Complete'|t('order-lifecycle'),
+        value: stats.avgTimeToCompletion ?: '-',
+        caption: 'Cart → order'|t('order-lifecycle'),
+        trend: null,
+        trendGood: true,
+    },
+    {
+        label: 'Avg. Retries'|t('order-lifecycle'),
+        value: stats.avgPaymentAttempts ?: '-',
+        caption: 'Per completed order'|t('order-lifecycle'),
+        trend: null,
+        trendGood: true,
+    },
+    {
+        label: 'Returning'|t('order-lifecycle'),
+        value: stats.returningCustomerRate ~ '%',
+        caption: 'Of completed orders'|t('order-lifecycle'),
+        trend: null,
+        trendGood: true,
+    },
+] %}
+
+{% if stats.avgCartValue %}
+    {% set cards = cards|merge([{
+        label: 'Cart Value'|t('order-lifecycle'),
+        value: stats.avgCartValue|currency,
+        caption: 'For completed orders'|t('order-lifecycle'),
+        trend: null,
+        trendGood: true,
+    }]) %}
+{% endif %}
+
+{% if stats.emailsSent or stats.emailsFailed %}
+    {% set cards = cards|merge([{
+        label: 'Email Success'|t('order-lifecycle'),
+        value: stats.emailSuccessRate ~ '%',
+        caption: '{sent} sent, {failed} failed'|t('order-lifecycle', {
+            sent: stats.emailsSent,
+            failed: stats.emailsFailed,
+        }),
+        trend: stats.trends.emailSuccessRate ?? null,
+        trendGood: true,
+    }]) %}
+{% endif %}
+
+<div class="ol-stat-surface">
+    <div class="ol-stat-grid">
+        {% for card in cards %}
+            <div class="ol-stat-cell{% if loop.last and cards|length is odd %} ol-stat-cell--full{% endif %}">
+                <div class="ol-stat-label">{{ card.label }}</div>
+                <div class="ol-stat-value-row">
+                    <span class="ol-stat-value{% if card.modifier ?? null %} ol-stat-value--{{ card.modifier }}{% endif %}">{{ card.value }}</span>
+                    {% if card.trend is not null %}
+                        {{ macros.trend(card.trend, card.trendGood) }}
+                    {% endif %}
+                </div>
+                <div class="ol-stat-sub">{{ card.caption }}</div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if showTopEvents and stats.topEventTypes|length > 0 %}
+    <div class="ol-events-list">
+        <div class="ol-events-title">{{ 'Top Events'|t('order-lifecycle') }}</div>
+        {% for event in stats.topEventTypes %}
+            <div class="ol-event-item">
+                <span class="ol-event-name">{{ event.label }}</span>
+                <span class="ol-event-count">{{ event.count|number_format }}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<div class="ol-period-note">
+    {% if showAllTimeNote and stats.days == 0 %}
+        {{ 'All time statistics'|t('order-lifecycle') }}
+    {% else %}
+        {{ 'Statistics for the last {days} days'|t('order-lifecycle', {days: stats.days}) }}
+    {% endif %}
+    {% if showAllTimeNote %}
+        &mdash; {{ 'includes carts currently in progress'|t('order-lifecycle') }}
+        {% if stats.trends is not empty %}
+            &mdash; {{ 'trend vs prior {days} days'|t('order-lifecycle', {days: stats.days}) }}
+        {% endif %}
+    {% endif %}
+</div>

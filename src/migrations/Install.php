@@ -36,7 +36,7 @@ class Install extends Migration
             $this->createIndexes();
             $this->addForeignKeys();
 
-            Craft::$app->db->schema->refresh();
+            Craft::$app->getDb()->getSchema()->refresh();
         }
 
         return true;
@@ -69,6 +69,9 @@ class Install extends Migration
     protected function createTables(): bool
     {
         if (!$this->db->tableExists('{{%orderlifecycle_logs}}')) {
+            // microsecond precision so same-second events keep their insert order
+            $microsecondDateTime = $this->db->getIsPgsql() ? 'timestamp(6)' : 'datetime(6)';
+
             $this->createTable('{{%orderlifecycle_logs}}', [
                 'id' => $this->primaryKey(),
                 'orderId' => $this->integer()->notNull(),
@@ -77,8 +80,8 @@ class Install extends Migration
                 'snapshot' => $this->mediumText()->null(), // JSON
                 'userId' => $this->integer()->null(),
                 'ip' => $this->string(45)->null(),   // IPv4/IPv6
-                'dateCreated' => 'datetime(6) NOT NULL',
-                'dateUpdated' => 'datetime(6) NOT NULL',
+                'dateCreated' => "$microsecondDateTime NOT NULL",
+                'dateUpdated' => "$microsecondDateTime NOT NULL",
                 'uid' => $this->uid(),
             ]);
         }

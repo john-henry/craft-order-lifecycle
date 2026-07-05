@@ -1,0 +1,37 @@
+{# =========================================================================
+   AI Insight - Structured Analysis
+   Renders a decoded structured per-order insight payload (an optional
+   priority-action callout plus labeled ACTION / INFO / GOOD cards).
+   Expects:
+     structured - the array returned by AiInsightsService::decodeStructuredInsights()
+   ========================================================================= #}
+<div class="lifecycle-analysis">
+   {% if structured.priorityAction %}
+      <div class="lifecycle-analysis-priority">
+         <svg class="lifecycle-analysis-priority-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm0-10.75a.75.75 0 0 1 .75.75v4a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75ZM8 11.5a.875.875 0 1 0 0-1.75.875.875 0 0 0 0 1.75Z" clip-rule="evenodd" />
+         </svg>
+         <span><strong>{{ 'Priority action'|t('order-lifecycle') }}:</strong> {{ structured.priorityAction }}</span>
+      </div>
+   {% endif %}
+
+   <div class="lifecycle-analysis-items">
+      {% for item in structured.items %}
+         {% set badgeModifier = item.type == 'action' ? 'action' : (item.type == 'good' ? 'good' : 'info') %}
+         <div class="lifecycle-analysis-item">
+            <span class="lifecycle-insight-badge lifecycle-insight-badge--{{ badgeModifier }}">{{ item.type|default('info')|upper }}</span>
+            <div class="lifecycle-analysis-item-body">
+               <span class="lifecycle-analysis-item-title">{{ item.title }}</span>
+               {{ item.description }}
+               {% if item.bullets is defined and item.bullets|length %}
+                  <ul class="lifecycle-analysis-item-bullets">
+                     {% for bullet in item.bullets %}
+                        <li>{{ bullet }}</li>
+                     {% endfor %}
+                  </ul>
+               {% endif %}
+            </div>
+         </div>
+      {% endfor %}
+   </div>
+</div>

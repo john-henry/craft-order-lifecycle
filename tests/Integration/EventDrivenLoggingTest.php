@@ -35,8 +35,8 @@ describe('EVENT_AFTER_SAVE: coupon changes', function () {
         $order->couponCode = 'SAVE10';
         reSave($order); // COUPON_APPLIED (count = 1)
 
-        reSave($order); // same code — no new event
-        reSave($order); // same code — no new event
+        reSave($order); // same code, no new event
+        reSave($order); // same code, no new event
 
         expect(logCount($order->id, EventType::COUPON_APPLIED))->toBe(1);
     });
@@ -108,9 +108,47 @@ describe('EVENT_AFTER_SAVE: shipping method changes', function () {
         $order->shippingMethodHandle = 'standard';
         reSave($order); // SHIPPING_METHOD_SET (count = 1)
 
-        reSave($order); // unchanged — no new event
+        reSave($order); // unchanged, no new event
 
         expect(logCount($order->id, EventType::SHIPPING_METHOD_SET))->toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Country changes (generateChangeDescription reads addresses.*.countryCode)
+// ---------------------------------------------------------------------------
+
+describe('generateChangeDescription: country changes', function () {
+    it('describes a shipping country change from the serialized address snapshot', function () {
+        $logger = OrderLifecycle::$plugin->getLogger();
+
+        $previous = ['addresses' => ['shipping' => ['countryCode' => 'IE']]];
+        $current = ['addresses' => ['shipping' => ['countryCode' => 'GB']]];
+
+        $message = $logger->generateChangeDescription($previous, $current, EventType::SHIPPING_METHOD_SET);
+
+        expect($message)->toContain('GB');
+    });
+
+    it('describes a billing country change from the serialized address snapshot', function () {
+        $logger = OrderLifecycle::$plugin->getLogger();
+
+        $previous = ['addresses' => ['billing' => ['countryCode' => 'IE']]];
+        $current = ['addresses' => ['billing' => ['countryCode' => 'FR']]];
+
+        $message = $logger->generateChangeDescription($previous, $current, EventType::BILLING_ADDRESS_SET);
+
+        expect($message)->toContain('FR');
+    });
+
+    it('returns null when the shipping country is unchanged', function () {
+        $logger = OrderLifecycle::$plugin->getLogger();
+
+        $snapshot = ['addresses' => ['shipping' => ['countryCode' => 'IE']]];
+
+        $message = $logger->generateChangeDescription($snapshot, $snapshot, EventType::SHIPPING_METHOD_SET);
+
+        expect($message)->toBeNull();
     });
 });
 
@@ -122,7 +160,7 @@ describe('EVENT_AFTER_SAVE: no-snapshot fallback', function () {
     it('logs CART_UPDATED when an order has no snapshot on re-save', function () {
         $order = orderWithSnapshot();
 
-        // Remove all logs, destroying the snapshot — also clear the in-memory
+        // Remove all logs, destroying the snapshot; also clear the in-memory
         // cache so the logger sees the same "no snapshot" state as the DB.
         Craft::$app->getDb()->createCommand()
             ->delete('{{%orderlifecycle_logs}}', ['orderId' => $order->id])

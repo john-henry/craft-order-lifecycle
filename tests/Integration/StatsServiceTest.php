@@ -225,14 +225,18 @@ describe('StatsService::getStats() trend indicators', function () {
     });
 
     it('returns a positive totalLogs trend when current period has far more events', function () {
+        // Trends are store-wide, so wipe the table first (rolled back on teardown)
+        // to keep the ratio deterministic against any seeded data.
+        Craft::$app->getDb()->createCommand()->delete('{{%orderlifecycle_logs}}')->execute();
+
         $order = makeOrder();
         $logger = OrderLifecycle::$plugin->getLogger();
 
-        // 1 row in the previous period, 200 in the current period.
-        // The 200:1 ratio dominates any pre-existing production data.
+        // 2 rows in the previous period, 20 in the current period.
         insertBackdatedLog($order->id, EventType::CART_CREATED, '-40 days');
+        insertBackdatedLog($order->id, EventType::CART_UPDATED, '-40 days');
 
-        for ($i = 0; $i < 200; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             $logger->log($order, EventType::CART_UPDATED);
         }
 
@@ -242,11 +246,15 @@ describe('StatsService::getStats() trend indicators', function () {
     });
 
     it('returns a negative totalLogs trend when previous period has far more events', function () {
+        // Trends are store-wide, so wipe the table first (rolled back on teardown)
+        // to keep the ratio deterministic against any seeded data.
+        Craft::$app->getDb()->createCommand()->delete('{{%orderlifecycle_logs}}')->execute();
+
         $order = makeOrder();
         $logger = OrderLifecycle::$plugin->getLogger();
 
-        // 200 rows in the previous period, 1 in the current period.
-        for ($i = 0; $i < 200; $i++) {
+        // 20 rows in the previous period, 1 in the current period.
+        for ($i = 0; $i < 20; $i++) {
             insertBackdatedLog($order->id, EventType::CART_UPDATED, '-40 days');
         }
 
@@ -254,7 +262,6 @@ describe('StatsService::getStats() trend indicators', function () {
 
         $stats = OrderLifecycle::$plugin->getStats()->getStats(30);
 
-        // 1 vs 2 → -50%
         expect($stats['trends']['totalLogs'])->toBeLessThan(0);
     });
 });

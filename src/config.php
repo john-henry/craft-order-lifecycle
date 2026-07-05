@@ -88,6 +88,10 @@ return [
         // Anthropic API key for AI Insights (set to '$ENV_VAR_NAME' to use an env var)
         // 'anthropicApiKey' => '$ANTHROPIC_API_KEY',
 
+        // Presentation style for per-order AI insights: 'structured' (priority action +
+        // labeled ACTION/INFO/GOOD cards) or 'narrative' (plain bullet-point summary).
+        // 'orderInsightsStyle' => 'structured',
+
         // Custom prompt for per-order AI insights. Leave empty to use the built-in default.
         // Use {placeholder} tokens - see docs for the full list.
         // 'orderInsightsPrompt' => '',

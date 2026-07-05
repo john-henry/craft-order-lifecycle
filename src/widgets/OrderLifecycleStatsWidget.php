@@ -35,6 +35,11 @@ class OrderLifecycleStatsWidget extends Widget
      */
     public int $days = 30;
 
+    /**
+     * @var bool Whether to show the "Top Events" list below the stat grid.
+     */
+    public bool $showTopEvents = true;
+
     // =========================================================================
     // Static Methods
     // =========================================================================
@@ -54,13 +59,13 @@ class OrderLifecycleStatsWidget extends Widget
     /**
      * @inheritdoc
      *
-     * @return string|null The widget icon path.
+     * @return string The widget icon path.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public static function icon(): ?string
+    public static function icon(): string
     {
-        return Craft::getAlias('@johnhenry/orderlifecycle/icon.svg');
+        return dirname(__DIR__) . '/icon-mask.svg';
     }
 
     /**
@@ -82,6 +87,40 @@ class OrderLifecycleStatsWidget extends Widget
     /**
      * @inheritdoc
      *
+     * @return array The validation rules.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function rules(): array
+    {
+        return [
+            [['days'], 'integer', 'min' => 1],
+            [['showTopEvents'], 'boolean'],
+        ];
+    }
+
+    /**
+     * @inheritdoc
+     *
+     * Shows the order count in scope (e.g. "Last 11 orders") in the widget's
+     * native title chrome, so the stat grid's Total Events card doesn't have
+     * to repeat it in its own caption.
+     *
+     * @return string|null The widget subtitle.
+     * @throws Exception If the stats query fails.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function getSubtitle(): ?string
+    {
+        $stats = OrderLifecycle::$plugin->getStats()->getStats($this->days);
+
+        return Craft::t('order-lifecycle', 'Last {count} orders', ['count' => $stats['uniqueOrders']]);
+    }
+
+    /**
+     * @inheritdoc
+     *
      * @return string|null The rendered widget body HTML.
      * @throws Exception If the stats query fails.
      * @author John Henry Donovan
@@ -89,13 +128,13 @@ class OrderLifecycleStatsWidget extends Widget
      */
     public function getBodyHtml(): ?string
     {
-        // Register the asset bundle for CSS
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
         $stats = OrderLifecycle::$plugin->getStats()->getStats($this->days);
 
         return Craft::$app->getView()->renderTemplate('order-lifecycle/_widgets/stats/body', [
             'widget' => $this,
             'stats' => $stats,
+            'showTopEvents' => $this->showTopEvents,
         ]);
     }
 

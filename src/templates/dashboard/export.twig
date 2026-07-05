@@ -7,5 +7,5 @@
 ] %}
 
 {% block content %}
-    {% include 'order-lifecycle/_utilities/export' %}
+    {% include 'order-lifecycle/_utilities/export' with { eventTypes: eventTypes } only %}
 {% endblock %}

@@ -18,6 +18,13 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 				<line x1="12" y1="22.08" x2="12" y2="12"></line>
 			</svg>
 		</span>
+    {% elseif eventType == 'orderCompleted' %}
+        <span class="status-icon order-completed">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+				<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+				<line x1="4" y1="22" x2="4" y2="15"></line>
+			</svg>
+		</span>
     {% elseif eventType starts with 'order' %}
         <span class="status-icon order">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
@@ -30,7 +37,6 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
         {% set payloadTransactionId = snapshotData.payload.transactionId ?? null %}
         {% set transactionStatus = null %}
         
-        {# Find the matching transaction to get the status #}
         {% if payloadTransactionId and transactions %}
             {% for transaction in transactions %}
                 {% if transaction.id == payloadTransactionId %}
@@ -80,14 +86,6 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 		 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
   <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12.735 14c.618 0 1.093-.561.872-1.139a6.002 6.002 0 0 0-11.215 0c-.22.578.254 1.139.872 1.139h9.47Z"/>
 </svg>
-
-		
-		{#    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-				<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-				<circle cx="12" cy="7" r="4"></circle>
-				<path d="M16 3h5v5"></path>
-				<line x1="21" y1="3" x2="16" y2="8"></line>
-			</svg> #}
 		</span>
     {% elseif eventType == 'statusChanged' %}
         <span class="status-icon status-update">

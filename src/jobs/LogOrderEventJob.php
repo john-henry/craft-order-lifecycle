@@ -8,14 +8,18 @@ namespace johnhenry\orderlifecycle\jobs;
 
 use Craft;
 use craft\queue\BaseJob;
-use yii\db\Exception;
+use johnhenry\orderlifecycle\OrderLifecycle;
 
 /**
- * Writes a single order lifecycle log entry from pre-built data.
+ * Persists an already-prepared lifecycle log row to the database.
  *
- * All snapshot/message/userId/IP data is captured at dispatch time so the
- * job reflects the order state at the moment the event occurred, not when
- * the queue worker processes it.
+ * This is the job {@see OrderLifecycleLogger::log()} pushes whenever the
+ * plugin's asyncLogging setting is on. Unlike {@see LogOrderEventDeferredJob},
+ * it does not rebuild anything: the snapshot and the change-description
+ * message are both built synchronously by log() before this job is queued,
+ * so the timeline stays accurate (no other event for the same order can run
+ * in between and change what "the previous snapshot" means). Only the DB
+ * write itself, the part with no bearing on message accuracy, is deferred.
  *
  * @author John Henry Donovan
  * @since 1.0.0
@@ -27,49 +31,9 @@ class LogOrderEventJob extends BaseJob
     // =========================================================================
 
     /**
-     * @var int The ID of the order the event belongs to.
+     * @var array The fully-prepared log row, ready to insert as-is.
      */
-    public int $orderId;
-
-    /**
-     * @var string The event type handle.
-     */
-    public string $type;
-
-    /**
-     * @var string|null An optional human-readable message describing the event.
-     */
-    public ?string $message;
-
-    /**
-     * @var string|null The JSON-encoded order snapshot captured at dispatch time.
-     */
-    public ?string $snapshot;
-
-    /**
-     * @var int|null The ID of the user who triggered the event, if known.
-     */
-    public ?int $userId;
-
-    /**
-     * @var string|null The IP address of the user who triggered the event, if collected.
-     */
-    public ?string $ip;
-
-    /**
-     * @var string The creation timestamp for the log row.
-     */
-    public string $dateCreated;
-
-    /**
-     * @var string The update timestamp for the log row.
-     */
-    public string $dateUpdated;
-
-    /**
-     * @var string The UID for the log row.
-     */
-    public string $uid;
+    public array $logData = [];
 
     // =========================================================================
     // Public Methods
@@ -80,25 +44,12 @@ class LogOrderEventJob extends BaseJob
      *
      * @param mixed $queue The queue the job belongs to.
      * @return void
-     * @throws Exception If the log row cannot be inserted.
      * @author John Henry Donovan
      * @since 1.0.0
      */
     public function execute($queue): void
     {
-        Craft::$app->getDb()->createCommand()
-            ->insert('{{%orderlifecycle_logs}}', [
-                'orderId' => $this->orderId,
-                'type' => $this->type,
-                'message' => $this->message,
-                'snapshot' => $this->snapshot,
-                'userId' => $this->userId,
-                'ip' => $this->ip,
-                'dateCreated' => $this->dateCreated,
-                'dateUpdated' => $this->dateUpdated,
-                'uid' => $this->uid,
-            ])
-            ->execute();
+        OrderLifecycle::$plugin->getLogger()->insertLogRow($this->logData);
     }
 
     // =========================================================================
@@ -114,6 +65,6 @@ class LogOrderEventJob extends BaseJob
      */
     protected function defaultDescription(): ?string
     {
-        return Craft::t('order-lifecycle', 'Log order lifecycle event');
+        return Craft::t('order-lifecycle', 'Write order lifecycle log entry');
     }
 }

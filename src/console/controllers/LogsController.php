@@ -11,6 +11,7 @@ use craft\db\Query;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use Exception;
+use johnhenry\orderlifecycle\OrderLifecycle;
 use yii\console\Controller;
 use yii\console\ExitCode;
 use yii\helpers\BaseConsole;
@@ -96,7 +97,6 @@ class LogsController extends Controller
         try {
             $cutoffDate = DateTimeHelper::toDateTime('-' . $this->days . ' days');
 
-            // Count logs to be deleted
             $logsToDelete = (new Query())
                 ->from('{{%orderlifecycle_logs}}')
                 ->where(['<', 'dateCreated', Db::prepareDateForDb($cutoffDate)])
@@ -110,7 +110,6 @@ class LogsController extends Controller
             $this->stdout(Craft::t('order-lifecycle', 'Found {count} log(s) to delete.', ['count' => $logsToDelete]) . PHP_EOL . PHP_EOL);
 
             if ($this->dryRun) {
-                // Show sample of logs that would be deleted
                 $sampleLogs = (new Query())
                     ->select(['id', 'orderId', 'type', 'dateCreated'])
                     ->from('{{%orderlifecycle_logs}}')
@@ -137,7 +136,6 @@ class LogsController extends Controller
                 $this->stdout(PHP_EOL . Craft::t('order-lifecycle', 'Dry run complete. No logs were actually deleted.') . PHP_EOL, BaseConsole::FG_YELLOW);
                 $this->stdout(Craft::t('order-lifecycle', 'Run without --dry-run to delete {count} log(s).', ['count' => $logsToDelete]) . PHP_EOL, BaseConsole::FG_YELLOW);
             } else {
-                // Actually delete the logs
                 $deleted = Craft::$app->getDb()->createCommand()
                     ->delete('{{%orderlifecycle_logs}}', ['<', 'dateCreated', Db::prepareDateForDb($cutoffDate)])
                     ->execute();
@@ -202,22 +200,7 @@ class LogsController extends Controller
                 $this->stdout(PHP_EOL . Craft::t('order-lifecycle', 'Dry run complete. No logs were actually deleted.') . PHP_EOL, BaseConsole::FG_YELLOW);
                 $this->stdout(Craft::t('order-lifecycle', 'Run without --dry-run to delete {count} log(s).', ['count' => $count]) . PHP_EOL, BaseConsole::FG_YELLOW);
             } else {
-                $orphanedIds = (new Query())
-                    ->select('orderId')
-                    ->from([
-                        'tmp' => (new Query())
-                            ->select('[[l.orderId]]')
-                            ->from('{{%orderlifecycle_logs}} l')
-                            ->leftJoin('{{%elements}} e', '[[e.id]] = [[l.orderId]]')
-                            ->where(['OR',
-                                ['e.id' => null],
-                                ['NOT', ['e.dateDeleted' => null]],
-                            ]),
-                    ]);
-
-                $deleted = Craft::$app->getDb()->createCommand()
-                    ->delete('{{%orderlifecycle_logs}}', ['in', 'orderId', $orphanedIds])
-                    ->execute();
+                $deleted = OrderLifecycle::getInstance()->getLogger()->deleteOrphanedLogs();
 
                 $this->stdout(Craft::t('order-lifecycle', 'Successfully deleted {count} log(s).', ['count' => $deleted]) . PHP_EOL, BaseConsole::FG_GREEN);
             }
@@ -241,14 +224,12 @@ class LogsController extends Controller
         $this->stdout(Craft::t('order-lifecycle', 'Order Lifecycle Log Statistics') . PHP_EOL . PHP_EOL, BaseConsole::FG_YELLOW);
 
         try {
-            // Total logs
             $totalLogs = (new Query())
                 ->from('{{%orderlifecycle_logs}}')
                 ->count();
 
             $this->stdout(Craft::t('order-lifecycle', 'Total logs: {count}', ['count' => $totalLogs]) . PHP_EOL, BaseConsole::FG_CYAN);
 
-            // Logs by type
             $logsByType = (new Query())
                 ->select(['type', 'COUNT(*) as count'])
                 ->from('{{%orderlifecycle_logs}}')
@@ -261,7 +242,6 @@ class LogsController extends Controller
                 $this->stdout(sprintf("  %-30s %d" . PHP_EOL, $row['type'], $row['count']));
             }
 
-            // Oldest and newest logs
             $oldestLog = (new Query())
                 ->select(['dateCreated'])
                 ->from('{{%orderlifecycle_logs}}')
@@ -282,8 +262,7 @@ class LogsController extends Controller
                 $this->stdout('  ' . Craft::t('order-lifecycle', 'Newest: {date}', ['date' => $newestLog]) . PHP_EOL);
             }
 
-            // Calculate storage estimate (rough estimate)
-            // Average log entry is approximately 2KB
+            // rough estimate - ~2KB per log entry
             $estimatedSizeKB = $totalLogs * 2;
             $estimatedSizeMB = round($estimatedSizeKB / 1024, 2);
 
@@ -314,6 +293,8 @@ class LogsController extends Controller
                 $db->createCommand("OPTIMIZE TABLE {{%orderlifecycle_logs}}")->execute();
                 $this->stdout(Craft::t('order-lifecycle', 'Table optimized successfully.') . PHP_EOL, BaseConsole::FG_GREEN);
             } elseif ($db->getIsPgsql()) {
+                // VACUUM can't run inside a transaction - fine here since this
+                // console action never opens one
                 $db->createCommand("VACUUM ANALYZE {{%orderlifecycle_logs}}")->execute();
                 $this->stdout(Craft::t('order-lifecycle', 'Table vacuumed successfully.') . PHP_EOL, BaseConsole::FG_GREEN);
             } else {
