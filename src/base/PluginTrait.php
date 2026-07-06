@@ -81,9 +81,8 @@ trait PluginTrait
         $user = Craft::$app->getUser();
         $subnav = [];
 
-        // Craft already gates the whole CP section behind its built-in
-        // "Access Order Lifecycle" permission, so the Overview page uses that
-        // same permission rather than a second one that means the same thing.
+        // Craft already hides the whole section unless the user has its built-in
+        // "Access Order Lifecycle" permission, so the Overview page checks that one too
         if ($user->checkPermission('accessplugin-order-lifecycle')) {
             $subnav['overview'] = ['label' => Craft::t('order-lifecycle', 'Overview'), 'url' => 'order-lifecycle'];
         }
@@ -211,7 +210,6 @@ trait PluginTrait
                     'order-lifecycle/export/csv' => 'order-lifecycle/export/csv',
                     'order-lifecycle/ai/insights' => 'order-lifecycle/ai/insights',
                     'order-lifecycle/ai/store-insights' => 'order-lifecycle/ai/store-insights',
-                    'order-lifecycle/ai/store-insights/status' => 'order-lifecycle/ai/store-insights-status',
                     'order-lifecycle' => 'order-lifecycle/dashboard/index',
                     'order-lifecycle/insights' => 'order-lifecycle/dashboard/insights',
                     'order-lifecycle/export' => 'order-lifecycle/dashboard/export',

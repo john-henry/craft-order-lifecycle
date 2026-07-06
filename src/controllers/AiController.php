@@ -11,7 +11,6 @@ use craft\commerce\elements\Order;
 use craft\commerce\Plugin as Commerce;
 use craft\web\Controller;
 use johnhenry\orderlifecycle\enums\EventType;
-use johnhenry\orderlifecycle\jobs\GenerateStoreInsights;
 use johnhenry\orderlifecycle\OrderLifecycle;
 use JsonException;
 use yii\base\InvalidConfigException;
@@ -121,12 +120,13 @@ class AiController extends Controller
     }
 
     /**
-     * Queues store-wide AI insight generation and returns immediately.
+     * Generates store-wide AI insights and returns them.
      *
-     * The Anthropic call runs on the queue rather than blocking the request; the
-     * CP polls actionStoreInsightsStatus for the result.
+     * Runs inline like {@see actionInsights()} so it works without a queue
+     * worker; the store manager waits on a spinner while Claude responds. The
+     * result is also saved so the dashboard and widget can show it on reload.
      *
-     * @return Response The JSON response indicating the job was queued.
+     * @return Response The JSON response containing the insights or an error.
      * @throws MethodNotAllowedHttpException If the request is not a POST request.
      * @throws BadRequestHttpException If the request does not accept a JSON response.
      * @throws ForbiddenHttpException If the user lacks the required permission.
@@ -144,8 +144,9 @@ class AiController extends Controller
         $days = max(0, min(365, $days)); // 0 = all time
 
         $ai = OrderLifecycle::getInstance()->getAiInsights();
+        $apiKey = $ai->getApiKey();
 
-        if ($ai->getApiKey() === '') {
+        if ($apiKey === '') {
             return $this->asJson([
                 'success' => false,
                 'error' => Craft::t('order-lifecycle', 'No Anthropic API key configured.'),
@@ -155,52 +156,26 @@ class AiController extends Controller
         $context = $ai->truncateContext((string)$this->request->getBodyParam('context', ''));
         $storeId = Commerce::getInstance()?->getStores()->getCurrentStore()->id;
 
-        // the stats query + 60s Anthropic call can get close to the queue's
-        // default 300s TTR under load, so give it more room than that
-        Craft::$app->getQueue()->ttr(600)->push(new GenerateStoreInsights([
-            'days' => $days,
-            'context' => $context,
-            'storeId' => $storeId,
-        ]));
+        try {
+            $stats = OrderLifecycle::getInstance()->getStats()->getStoreInsightStats($days, $storeId);
+            $prompt = $ai->buildStorePrompt($stats, $days, $context);
+            $insights = $ai->generateInsights($apiKey, $prompt);
+        } catch (\Throwable $e) {
+            Craft::error('Order Lifecycle store insights error: ' . $e->getMessage(), 'order-lifecycle');
 
-        return $this->asJson([
-            'success' => true,
-            'queued' => true,
-            'days' => $days,
-        ]);
-    }
-
-    /**
-     * Returns the most recently generated store-wide insights, if any.
-     *
-     * @return Response The JSON response with the stored insights or a pending flag.
-     * @throws BadRequestHttpException If the request does not accept a JSON response.
-     * @throws ForbiddenHttpException If the user lacks the required permission.
-     * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public function actionStoreInsightsStatus(): Response
-    {
-        $this->requireAcceptsJson();
-        $this->requirePermission('order-lifecycle:generateInsights');
-
-        $storeId = Commerce::getInstance()?->getStores()->getCurrentStore()->id;
-        $saved = OrderLifecycle::getInstance()->getAiInsights()->getSavedStoreInsights($storeId);
-
-        if ($saved === null) {
             return $this->asJson([
-                'success' => true,
-                'ready' => false,
+                'success' => false,
+                'error' => Craft::t('order-lifecycle', 'Failed to get AI insights. Please try again.'),
             ]);
         }
 
+        $saved = $ai->saveStoreInsights($insights, $days, $storeId);
+
         return $this->asJson([
             'success' => true,
-            'ready' => true,
-            'insights' => $saved['insights'],
-            'generatedAt' => $saved['generatedAt'],
-            'days' => $saved['days'],
+            'insights' => $insights,
+            'days' => $days,
+            'generatedAt' => $saved['generatedAt'] ?? null,
         ]);
     }
 

@@ -99,6 +99,7 @@ return [
     'Generate Insights' => 'Generate Insights',
     'Generate insights' => 'Generate insights',
     'Generated' => 'Generated',
+    'Get an AI-written summary of your store\'s conversion, payments, email reliability and anomalies. Pick a period, add any context or a specific question for Claude, then generate the report.' => 'Get an AI-written summary of your store\'s conversion, payments, email reliability and anomalies. Pick a period, add any context or a specific question for Claude, then generate the report.',
     'Guest' => 'Guest',
     'Guest customer visited checkout page' => 'Guest customer visited checkout page',
     'Hide full snapshot' => 'Hide full snapshot',
@@ -320,7 +321,6 @@ return [
     'Overview' => 'Overview',
 
     // Jobs
-    'Generate store-wide AI insights' => 'Generate store-wide AI insights',
     'Log order lifecycle event' => 'Log order lifecycle event',
     'Write order lifecycle log entry' => 'Write order lifecycle log entry',
 

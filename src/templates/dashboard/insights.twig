@@ -9,6 +9,8 @@
 {% do view.registerAssetBundle('johnhenry\\orderlifecycle\\assets\\OrderLifecycleAsset') %}
 
 {% block content %}
+    <p class="ol-ai-page-intro">{{ 'Get an AI-written summary of your store\'s conversion, payments, email reliability and anomalies. Pick a period, add any context or a specific question for Claude, then generate the report.'|t('order-lifecycle') }}</p>
+
 {% if not hasApiKey %}
     <div class="readable">
         <p>

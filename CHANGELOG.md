@@ -1,8 +1,20 @@
 # Release Notes for Order Lifecycle
 
+## 1.0.3 - 2026-07-06
+
+### Changed
+- Empty carts a shopper opened but never put an item into are no longer counted in the Conversion or Abandonment stats. Both now measure real, item-bearing carts, so an empty session cart no longer drags the conversion rate down or gets treated as abandoned.
+- Store-wide AI insights now generate right there on the page, the same way the per-order insights do, instead of running on the Craft queue. They no longer need a queue worker to be running, so they generate reliably and appear as soon as Claude responds.
+- Tidied up the AI Insights page and the dashboard widget: dropped the extra border that boxed the report inside another box, and added a short intro line to the AI Insights page explaining what it does.
+
+### Fixed
+- Generated store-wide AI insights now stay put after a page reload and show on the dashboard widget as well. They were being saved under one cache key but read back under another, so they'd vanish on reload and never turn up on the widget.
+- Copying AI insights now copies the readable text instead of the raw Markdown (asterisks, hashes and dashes).
+
 ## 1.0.2 - 2026-07-06
 
 ### Fixed
+- The Abandonment stat could show a rate well over 100% (and far more abandoned carts than carts created), because it counted every idle incomplete cart in Commerce, including empty per-visitor session carts and carts created before the plugin was installed. It now only counts carts the plugin tracked as created, so it stays in step with the Conversion stat.
 - The Order Lifecycle control panel menu now shows for a non-admin user once their group is given the built-in "Access Order Lifecycle" permission. The Overview page is gated by that permission instead of a separate "Access dashboard" one, which on its own never revealed the menu (grant "Access Order Lifecycle" to any group that had "Access dashboard" before).
 - Shipping method names in the timeline are now read through Commerce's shipping-method interface, so a custom shipping-method plugin that doesn't expose its name as a plain property no longer shows up blank.
 
