@@ -1,5 +1,11 @@
 # Release Notes for Order Lifecycle
 
+## 1.0.2 - 2026-07-06
+
+### Fixed
+- The Order Lifecycle control panel menu now shows for a non-admin user once their group is given the built-in "Access Order Lifecycle" permission. The Overview page is gated by that permission instead of a separate "Access dashboard" one, which on its own never revealed the menu (grant "Access Order Lifecycle" to any group that had "Access dashboard" before).
+- Shipping method names in the timeline are now read through Commerce's shipping-method interface, so a custom shipping-method plugin that doesn't expose its name as a plain property no longer shows up blank.
+
 ## 1.0.1 - 2026-07-06
 
 ### Changed

@@ -81,7 +81,10 @@ trait PluginTrait
         $user = Craft::$app->getUser();
         $subnav = [];
 
-        if ($user->checkPermission('order-lifecycle:accessDashboard')) {
+        // Craft already gates the whole CP section behind its built-in
+        // "Access Order Lifecycle" permission, so the Overview page uses that
+        // same permission rather than a second one that means the same thing.
+        if ($user->checkPermission('accessplugin-order-lifecycle')) {
             $subnav['overview'] = ['label' => Craft::t('order-lifecycle', 'Overview'), 'url' => 'order-lifecycle'];
         }
 
@@ -176,9 +179,6 @@ trait PluginTrait
                 $event->permissions[] = [
                     'heading' => Craft::t('order-lifecycle', 'Order Lifecycle'),
                     'permissions' => [
-                        'order-lifecycle:accessDashboard' => [
-                            'label' => Craft::t('order-lifecycle', 'Access dashboard'),
-                        ],
                         'order-lifecycle:exportEvents' => [
                             'label' => Craft::t('order-lifecycle', 'Export lifecycle events'),
                         ],
