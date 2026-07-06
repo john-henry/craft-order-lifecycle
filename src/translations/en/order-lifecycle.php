@@ -315,7 +315,6 @@ return [
     'This field can only be used with saved orders.' => 'This field can only be used with saved orders.',
 
     // CP nav and permissions
-    'Access dashboard' => 'Access dashboard',
     'Export lifecycle events' => 'Export lifecycle events',
     'Generate AI insights' => 'Generate AI insights',
     'Overview' => 'Overview',

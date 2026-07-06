@@ -52,7 +52,7 @@ class DashboardController extends Controller
      */
     public function actionIndex(): Response
     {
-        $this->requirePermission('order-lifecycle:accessDashboard');
+        $this->requirePermission('accessplugin-order-lifecycle');
 
         $request = Craft::$app->getRequest();
         $days = (int)$request->getParam('days', 30);

@@ -1332,8 +1332,11 @@ class OrderLifecycleLogger extends Component
             ->getAllShippingMethods();
 
         foreach ($allShippingMethods as $method) {
-            if ($method->handle === $handle) {
-                return $method->name;
+            // getHandle()/getName() are the ShippingMethodInterface contract -
+            // safer than the magic ->handle/->name accessors, which not every
+            // implementer (custom shipping method plugins) exposes as properties
+            if ($method->getHandle() === $handle) {
+                return $method->getName();
             }
         }
 
