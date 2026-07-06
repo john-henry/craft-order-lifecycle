@@ -1,5 +1,18 @@
 # Release Notes for Order Lifecycle
 
+## 1.0.1 - 2026-07-06
+
+### Changed
+- The full AI Insights page now uses the same dashed-border card and plain Generate Insights button as the AI Insights dashboard widget, instead of a white panel with a purple button.
+
+### Fixed
+- The Cart Value stat on the Order Lifecycle Stats widget now always shows the store's own currency, instead of sometimes showing another currency depending on the browsing user's locale.
+- The Abandonment stat on the Order Lifecycle Stats widget could show a wildly inflated rate compared to the Conversion stat - both now agree with each other.
+- A cart now only counts as abandoned once it's had no activity for an hour, instead of any incomplete cart counting as abandoned regardless of how recently it was last touched.
+- AI-generated store insights now correctly reflect the individual store they were requested for, instead of AI Insights sometimes mixing up store data or showing one store's insights for another on multi-store installs.
+- The Order Lifecycle Stats widget could briefly show one store's numbers on another store's dashboard right after switching stores.
+- The Order Lifecycle Stats widget and dashboard now scope every stat to the current store, instead of mixing in other stores' totals, event counts and cart values on multi-store installs.
+
 ## 1.0.0 - 2026-07-05
 
 ### Security
@@ -20,7 +33,7 @@
 
 ### Changed
 - First stable release. The plugin is out of beta and ready to run in production.
-- - Cut down database storage per logged event by dropping data that was never actually surfaced anywhere in the plugin.
+- Cut down database storage per logged event by dropping data that was never actually surfaced anywhere in the plugin.
 - Improved keyboard navigation, screen reader support, and colour contrast throughout the control panel.
 - The "Top Events" list now shows readable event names (e.g. "Billing Address Set") instead of raw internal codes.
 - The AI Insights dashboard widget and page now share the same layout and controls, and the widget's separate settings screen is gone, since its one setting now lives directly on the widget.

@@ -75,6 +75,7 @@ class Install extends Migration
             $this->createTable('{{%orderlifecycle_logs}}', [
                 'id' => $this->primaryKey(),
                 'orderId' => $this->integer()->notNull(),
+                'storeId' => $this->integer()->null(),
                 'type' => $this->string(50)->notNull(),
                 'message' => $this->text()->null(),
                 'snapshot' => $this->mediumText()->null(), // JSON
@@ -101,6 +102,7 @@ class Install extends Migration
         $this->createIndex(null, '{{%orderlifecycle_logs}}', ['dateCreated']);
         $this->createIndex(null, '{{%orderlifecycle_logs}}', ['userId']);
         $this->createIndex(null, '{{%orderlifecycle_logs}}', ['type']);
+        $this->createIndex(null, '{{%orderlifecycle_logs}}', ['storeId']);
     }
 
     /**
@@ -122,6 +124,12 @@ class Install extends Migration
             null,
             '{{%orderlifecycle_logs}}', 'userId',
             '{{%users}}', 'id',
+            'SET NULL', 'CASCADE'
+        );
+        $this->addForeignKey(
+            null,
+            '{{%orderlifecycle_logs}}', 'storeId',
+            '{{%commerce_stores}}', 'id',
             'SET NULL', 'CASCADE'
         );
     }

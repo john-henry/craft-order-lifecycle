@@ -90,7 +90,7 @@
 {% if stats.avgCartValue %}
     {% set cards = cards|merge([{
         label: 'Cart Value'|t('order-lifecycle'),
-        value: stats.avgCartValue|currency,
+        value: stats.avgCartValue|currency(craft.commerce.paymentCurrencies.primaryPaymentCurrency.iso),
         caption: 'For completed orders'|t('order-lifecycle'),
         trend: null,
         trendGood: true,

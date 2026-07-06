@@ -153,12 +153,14 @@ class AiController extends Controller
         }
 
         $context = $ai->truncateContext((string)$this->request->getBodyParam('context', ''));
+        $storeId = Commerce::getInstance()?->getStores()->getCurrentStore()->id;
 
         // the stats query + 60s Anthropic call can get close to the queue's
         // default 300s TTR under load, so give it more room than that
         Craft::$app->getQueue()->ttr(600)->push(new GenerateStoreInsights([
             'days' => $days,
             'context' => $context,
+            'storeId' => $storeId,
         ]));
 
         return $this->asJson([
@@ -183,7 +185,8 @@ class AiController extends Controller
         $this->requireAcceptsJson();
         $this->requirePermission('order-lifecycle:generateInsights');
 
-        $saved = OrderLifecycle::getInstance()->getAiInsights()->getSavedStoreInsights();
+        $storeId = Commerce::getInstance()?->getStores()->getCurrentStore()->id;
+        $saved = OrderLifecycle::getInstance()->getAiInsights()->getSavedStoreInsights($storeId);
 
         if ($saved === null) {
             return $this->asJson([
