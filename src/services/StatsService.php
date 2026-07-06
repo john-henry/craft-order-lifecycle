@@ -46,7 +46,12 @@ class StatsService extends Component
      */
     public function getStats(int $days): array
     {
-        $cacheKey = 'orderlifecycle_stats_' . $days;
+        // scope to the current store so stats don't bleed across stores
+        $storeId = $this->_resolveStoreId();
+
+        // storeId in the key too, or one store's cached snapshot would get
+        // served to another store for up to 5 minutes on a multi-store install
+        $cacheKey = 'orderlifecycle_stats_' . $days . '_' . ($storeId ?? 'all');
         $cached = Craft::$app->getCache()->get($cacheKey);
 
         if ($cached !== false) {
@@ -57,18 +62,17 @@ class StatsService extends Component
         $sinceDate = $days > 0 ? DateTimeHelper::toDateTime('-' . $days . ' days') : null;
         $sinceDateDb = $sinceDate ? Db::prepareDateForDb($sinceDate) : null;
 
-        // scope to the current store so stats don't bleed across stores
-        $storeId = $this->_resolveStoreId();
-
         $totalLogs = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->count();
 
         $logsByType = (new Query())
             ->select(['type', 'COUNT(*) as count'])
             ->from('{{%orderlifecycle_logs}}')
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->groupBy(['type'])
             ->orderBy(['count' => SORT_DESC])
             ->all();
@@ -76,6 +80,7 @@ class StatsService extends Component
         $uniqueOrders = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->count('DISTINCT [[orderId]]');
 
         $avgLogsPerOrder = $uniqueOrders > 0 ? round($totalLogs / $uniqueOrders, 1) : 0;
@@ -90,14 +95,14 @@ class StatsService extends Component
             array_slice($logsByType, 0, 5)
         );
 
-        $avgTimeToCompletion = $this->getAverageTimeToCompletion($sinceDateDb);
+        $avgTimeToCompletion = $this->getAverageTimeToCompletion($sinceDateDb, $storeId);
         $conversionStats = $this->getConversionStats($sinceDateDb, $storeId);
-        $avgCheckoutDuration = $this->getAverageCheckoutDuration($sinceDateDb);
-        $abandonmentStats = $this->getAbandonmentStats($sinceDateDb);
-        $avgPaymentAttempts = $this->getAveragePaymentAttempts($sinceDateDb);
+        $avgCheckoutDuration = $this->getAverageCheckoutDuration($sinceDateDb, $storeId);
+        $abandonmentStats = $this->getAbandonmentStats($sinceDateDb, $storeId, $conversionStats);
+        $avgPaymentAttempts = $this->getAveragePaymentAttempts($sinceDateDb, $storeId);
         $returningCustomerRate = $this->getReturningCustomerRate($sinceDateDb, $storeId);
-        $avgCartValue = $this->getAverageCartValue($sinceDateDb);
-        $emailStats = $this->getEmailStats($sinceDateDb);
+        $avgCartValue = $this->getAverageCartValue($sinceDateDb, $storeId);
+        $emailStats = $this->getEmailStats($sinceDateDb, $storeId);
 
         // no prior period to compare against for all-time
         $trends = [];
@@ -105,7 +110,7 @@ class StatsService extends Component
             $prevSinceDateDb = Db::prepareDateForDb(
                 DateTimeHelper::toDateTime('-' . ($days * 2) . ' days')
             );
-            $trends = $this->computeTrends($sinceDateDb, $prevSinceDateDb, [
+            $trends = $this->computeTrends($sinceDateDb, $prevSinceDateDb, $storeId, [
                 'totalLogs' => (int)$totalLogs,
                 'uniqueOrders' => (int)$uniqueOrders,
                 'conversionRate' => $conversionStats['rate'],
@@ -150,53 +155,64 @@ class StatsService extends Component
      * which `buildSnapshot()` always populates.
      *
      * @param int $days The look-back window in days; 0 means all time.
+     * @param int|null $storeId The store to scope stats to, or null for all stores.
      * @return array The aggregated store statistics for the insight prompt.
      * @throws Exception If a query or date preparation fails.
      * @throws JsonException If a snapshot cannot be decoded.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public function getStoreInsightStats(int $days): array
+    public function getStoreInsightStats(int $days, ?int $storeId = null): array
     {
         $since = $days > 0
             ? Db::prepareDateForDb(DateTimeHelper::toDateTime('-' . $days . ' days'))
             : null;
 
-        $countByType = fn(string $type): int => (int)(new Query())
-            ->from('{{%orderlifecycle_logs}}')
-            ->where(['type' => $type])
-            ->andFilterWhere(['>=', 'dateCreated', $since])
-            ->count();
+        // every count here is scoped to the store via the logs' own storeId column
+        $countByType = function(string $type) use ($since, $storeId): int {
+            $query = (new Query())
+                ->from('{{%orderlifecycle_logs}}')
+                ->where(['type' => $type])
+                ->andFilterWhere(['>=', 'dateCreated', $since]);
+            $this->_scopeLogsToStore($query, $storeId);
 
-        $distinctByType = fn(string $type): int => (int)(new Query())
-            ->from('{{%orderlifecycle_logs}}')
-            ->where(['type' => $type])
-            ->andFilterWhere(['>=', 'dateCreated', $since])
-            ->count('DISTINCT [[orderId]]');
+            return (int)$query->count();
+        };
 
-        $totalLogs = (int)(new Query())->from('{{%orderlifecycle_logs}}')
-            ->andFilterWhere(['>=', 'dateCreated', $since])->count();
+        $totalLogsQuery = (new Query())->from('{{%orderlifecycle_logs}}')
+            ->andFilterWhere(['>=', 'dateCreated', $since]);
+        $this->_scopeLogsToStore($totalLogsQuery, $storeId);
+        $totalLogs = (int)$totalLogsQuery->count();
 
-        $uniqueOrders = (int)(new Query())->from('{{%orderlifecycle_logs}}')
-            ->andFilterWhere(['>=', 'dateCreated', $since])->count('DISTINCT [[orderId]]');
+        $uniqueOrdersQuery = (new Query())->from('{{%orderlifecycle_logs}}')
+            ->andFilterWhere(['>=', 'dateCreated', $since]);
+        $this->_scopeLogsToStore($uniqueOrdersQuery, $storeId);
+        $uniqueOrders = (int)$uniqueOrdersQuery->count('DISTINCT [[orderId]]');
 
-        $cartsCreated = $distinctByType('cartCreated');
-        $ordersCompleted = $distinctByType('orderCompleted');
+        // reuse the corrected totals (pre-plugin orders included) and the same
+        // 1-hour-inactivity abandonment definition used by the stats widget, instead
+        // of re-deriving them from raw log counts and drifting out of sync again
+        $conversionStats = $this->getConversionStats($since, $storeId);
+        $cartsCreated = $conversionStats['cartsCreated'];
+        $ordersCompleted = $conversionStats['ordersCompleted'];
+        $abandonmentStats = $this->getAbandonmentStats($since, $storeId, $conversionStats);
+
         $paymentAttempts = $countByType('paymentAttempt');
         $emailsSent = $countByType('emailSent');
         $emailsFailed = $countByType('emailFailed');
         $refunds = $countByType('paymentRefunded');
         $couponApplied = $countByType('couponApplied');
 
-        $topTypes = (new Query())->select(['type', 'COUNT(*) as count'])
+        $topTypesQuery = (new Query())->select(['type', 'COUNT(*) as count'])
             ->from('{{%orderlifecycle_logs}}')
-            ->andFilterWhere(['>=', 'dateCreated', $since])
-            ->groupBy(['type'])->orderBy(['count' => SORT_DESC])->limit(8)->all();
+            ->andFilterWhere(['>=', 'dateCreated', $since]);
+        $this->_scopeLogsToStore($topTypesQuery, $storeId);
+        $topTypes = $topTypesQuery->groupBy(['type'])->orderBy(['count' => SORT_DESC])->limit(8)->all();
 
-        [$avgCartValue, $currency] = $this->_averageCompletedOrderValue($since);
+        [$avgCartValue, $currency] = $this->_averageCompletedOrderValue($since, $storeId);
 
-        $conversionRate = $cartsCreated > 0 ? round(($ordersCompleted / $cartsCreated) * 100, 1) : 0;
-        $abandonmentRate = $cartsCreated > 0 ? round((($cartsCreated - $ordersCompleted) / $cartsCreated) * 100, 1) : 0;
+        $conversionRate = $conversionStats['rate'];
+        $abandonmentRate = $abandonmentStats['rate'];
         $emailSuccessRate = ($emailsSent + $emailsFailed) > 0
             ? round(($emailsSent / ($emailsSent + $emailsFailed)) * 100, 1) : null;
         $avgPaymentAttempts = $ordersCompleted > 0 ? round($paymentAttempts / $ordersCompleted, 2) : null;
@@ -254,18 +270,21 @@ class StatsService extends Component
      * Computes the average completed-order value and its currency from snapshots.
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope the average to, or null for all stores.
      * @return array{0: float|null, 1: string} The average value (or null) and currency code.
      * @throws JsonException If a snapshot cannot be decoded.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function _averageCompletedOrderValue(?string $sinceDateDb): array
+    private function _averageCompletedOrderValue(?string $sinceDateDb, ?int $storeId = null): array
     {
-        $completedLogs = (new Query())->select(['snapshot'])
+        $query = (new Query())->select(['snapshot'])
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderCompleted'])
-            ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
-            ->all();
+            ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb]);
+        $this->_scopeLogsToStore($query, $storeId);
+
+        $completedLogs = $query->all();
 
         $totalValue = 0;
         $count = 0;
@@ -290,6 +309,26 @@ class StatsService extends Component
     }
 
     /**
+     * Constrains a `{{%orderlifecycle_logs}}` query to a single store.
+     *
+     * A no-op when `$storeId` is null. Rows logged before the `storeId` column
+     * existed and whose order has since been deleted couldn't be backfilled and
+     * stay null, so they're naturally excluded from any store-scoped query.
+     *
+     * @param Query $query The logs query to constrain, mutated in place.
+     * @param int|null $storeId The store to scope to, or null for all stores.
+     * @return void
+     * @author John Henry Donovan
+     * @since 1.0.1
+     */
+    private function _scopeLogsToStore(Query $query, ?int $storeId): void
+    {
+        if ($storeId !== null) {
+            $query->andWhere(['storeId' => $storeId]);
+        }
+    }
+
+    /**
      * Resolves the Commerce store ID to scope order-table stats queries to.
      *
      * @return int|null The current store ID, or null if Commerce cannot resolve one.
@@ -309,18 +348,20 @@ class StatsService extends Component
      * Calculates the average time from cart creation to order completion.
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope counts to, or null for all stores.
      * @return string|null The formatted average duration, or null if none.
      * @throws Exception If a date cannot be parsed.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getAverageTimeToCompletion(?string $sinceDateDb): ?string
+    private function getAverageTimeToCompletion(?string $sinceDateDb, ?int $storeId = null): ?string
     {
         $completedOrders = (new Query())
             ->select(['orderId'])
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderCompleted'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->column();
 
         if (empty($completedOrders)) {
@@ -378,12 +419,14 @@ class StatsService extends Component
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'cartCreated'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->count('DISTINCT [[orderId]]');
 
         $ordersCompleted = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderCompleted'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->count('DISTINCT [[orderId]]');
 
         // orders from before the plugin was installed have no lifecycle logs
@@ -457,18 +500,20 @@ class StatsService extends Component
      * Calculates the average checkout duration (from checkout start to payment).
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope counts to, or null for all stores.
      * @return string|null The formatted average duration, or null if none.
      * @throws Exception If a date cannot be parsed.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getAverageCheckoutDuration(?string $sinceDateDb): ?string
+    private function getAverageCheckoutDuration(?string $sinceDateDb, ?int $storeId = null): ?string
     {
         $paidOrders = (new Query())
             ->select(['orderId'])
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderPaid'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->column();
 
         if (empty($paidOrders)) {
@@ -523,28 +568,50 @@ class StatsService extends Component
     }
 
     /**
+     * The number of seconds of inactivity after which an incomplete cart counts as abandoned.
+     *
+     * @author John Henry Donovan
+     * @since 1.0.1
+     */
+    private const ABANDONMENT_THRESHOLD_SECONDS = 3600;
+
+    /**
      * Calculates the cart abandonment rate.
      *
+     * A cart counts as abandoned once it's gone {@see ABANDONMENT_THRESHOLD_SECONDS} (1 hour)
+     * since its last activity (`dateUpdated`, which Commerce bumps on every recalculation) without
+     * completing. Carts still within that window are "in progress" - not completed, but not yet
+     * abandoned either - so they're excluded from both the numerator and, implicitly, from being
+     * miscounted as abandoned.
+     *
+     * Queries `{{%commerce_orders}}` directly (scoped to the same store and window as
+     * {@see getConversionStats()}) rather than the logs table, since the logs table has no record
+     * of "still active" state - only discrete events. `cartsCreated` for the rate's denominator is
+     * taken from `$conversionStats`, which already corrects for pre-plugin orders.
+     *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope counts to, or null for all stores.
+     * @param array $conversionStats The result of {@see getConversionStats()} for the same window.
      * @return array The number of abandoned carts and the abandonment rate.
+     * @throws Exception If the inactivity cutoff date fails to prepare.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getAbandonmentStats(?string $sinceDateDb): array
+    private function getAbandonmentStats(?string $sinceDateDb, ?int $storeId, array $conversionStats): array
     {
-        $cartsCreated = (new Query())
-            ->from('{{%orderlifecycle_logs}}')
-            ->where(['type' => 'cartCreated'])
-            ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
-            ->count('DISTINCT [[orderId]]');
+        $cutoff = Db::prepareDateForDb(
+            DateTimeHelper::toDateTime('-' . self::ABANDONMENT_THRESHOLD_SECONDS . ' seconds')
+        );
 
-        $ordersCompleted = (new Query())
-            ->from('{{%orderlifecycle_logs}}')
-            ->where(['type' => 'orderCompleted'])
+        $abandoned = (new Query())
+            ->from('{{%commerce_orders}}')
+            ->where(['isCompleted' => false])
+            ->andFilterWhere(['storeId' => $storeId])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
-            ->count('DISTINCT [[orderId]]');
+            ->andWhere(['<=', 'dateUpdated', $cutoff])
+            ->count();
 
-        $abandoned = $cartsCreated - $ordersCompleted;
+        $cartsCreated = $conversionStats['cartsCreated'];
         $rate = $cartsCreated > 0 ? round(($abandoned / $cartsCreated) * 100, 1) : 0;
 
         return [
@@ -560,17 +627,19 @@ class StatsService extends Component
      * reflects orders where the customer had to retry. Returns 0 when no retries occurred.
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope counts to, or null for all stores.
      * @return float The average payment retries per order that had retries.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getAveragePaymentAttempts(?string $sinceDateDb): float
+    private function getAveragePaymentAttempts(?string $sinceDateDb, ?int $storeId = null): float
     {
         $completedOrders = (new Query())
             ->select(['orderId'])
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderCompleted'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->column();
 
         if (empty($completedOrders)) {
@@ -651,18 +720,20 @@ class StatsService extends Component
      * Calculates the average cart value for completed orders.
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope counts to, or null for all stores.
      * @return float|null The average cart value, or null if none.
      * @throws JsonException If a snapshot cannot be decoded.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getAverageCartValue(?string $sinceDateDb): ?float
+    private function getAverageCartValue(?string $sinceDateDb, ?int $storeId = null): ?float
     {
         $completedOrders = (new Query())
             ->select(['orderId', 'snapshot'])
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderCompleted'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->all();
 
         if (empty($completedOrders)) {
@@ -691,47 +762,55 @@ class StatsService extends Component
      *
      * @param string $sinceDateDb The DB-formatted start of the current period.
      * @param string $prevSinceDateDb The DB-formatted start of the previous period.
+     * @param int|null $storeId The store to scope the baseline to, or null for all stores.
      * @return array The baseline counts for the previous period.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getPreviousPeriodBaseline(string $sinceDateDb, string $prevSinceDateDb): array
+    private function getPreviousPeriodBaseline(string $sinceDateDb, string $prevSinceDateDb, ?int $storeId = null): array
     {
         $start = ['>=', 'dateCreated', $prevSinceDateDb];
         $end = ['<',  'dateCreated', $sinceDateDb];
+        $store = ['storeId' => $storeId];
 
         $totalLogs = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->andWhere($start)->andWhere($end)
+            ->andFilterWhere($store)
             ->count();
 
         $uniqueOrders = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->andWhere($start)->andWhere($end)
+            ->andFilterWhere($store)
             ->count('DISTINCT [[orderId]]');
 
         $cartsCreated = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'cartCreated'])
             ->andWhere($start)->andWhere($end)
+            ->andFilterWhere($store)
             ->count('DISTINCT [[orderId]]');
 
         $ordersCompleted = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'orderCompleted'])
             ->andWhere($start)->andWhere($end)
+            ->andFilterWhere($store)
             ->count('DISTINCT [[orderId]]');
 
         $emailsSent = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'emailSent'])
             ->andWhere($start)->andWhere($end)
+            ->andFilterWhere($store)
             ->count();
 
         $emailsFailed = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'emailFailed'])
             ->andWhere($start)->andWhere($end)
+            ->andFilterWhere($store)
             ->count();
 
         return [
@@ -749,14 +828,15 @@ class StatsService extends Component
      *
      * @param string $sinceDateDb The DB-formatted start of the current period.
      * @param string $prevSinceDateDb The DB-formatted start of the previous period.
+     * @param int|null $storeId The store to scope the baseline to, or null for all stores.
      * @param array $current The current period's metric values.
      * @return array The percentage deltas for each tracked metric.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function computeTrends(string $sinceDateDb, string $prevSinceDateDb, array $current): array
+    private function computeTrends(string $sinceDateDb, string $prevSinceDateDb, ?int $storeId, array $current): array
     {
-        $prev = $this->getPreviousPeriodBaseline($sinceDateDb, $prevSinceDateDb);
+        $prev = $this->getPreviousPeriodBaseline($sinceDateDb, $prevSinceDateDb, $storeId);
 
         $prevConversionRate = $prev['cartsCreated'] > 0
             ? round(($prev['ordersCompleted'] / $prev['cartsCreated']) * 100, 1)
@@ -794,22 +874,25 @@ class StatsService extends Component
      * Calculates the email success rate.
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
+     * @param int|null $storeId The store to scope counts to, or null for all stores.
      * @return array The emails sent, failed and the success rate.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function getEmailStats(?string $sinceDateDb): array
+    private function getEmailStats(?string $sinceDateDb, ?int $storeId = null): array
     {
         $emailsSent = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'emailSent'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->count();
 
         $emailsFailed = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'emailFailed'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
+            ->andFilterWhere(['storeId' => $storeId])
             ->count();
 
         $total = $emailsSent + $emailsFailed;

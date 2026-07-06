@@ -139,8 +139,12 @@ function logCount(int $orderId, EventType $type): int
 function insertBackdatedLog(int $orderId, EventType $type, string $at = 'now'): void
 {
     $date = date('Y-m-d H:i:s', strtotime($at));
+    // stamp the current store so these rows survive the store-scoped stats
+    // queries, matching what the logger writes for a real order save
+    $storeId = Commerce::getInstance()->getStores()->getCurrentStore()->id;
     Craft::$app->getDb()->createCommand()->insert('{{%orderlifecycle_logs}}', [
         'orderId'     => $orderId,
+        'storeId'     => $storeId,
         'type'        => $type->value,
         'message'     => '',
         'snapshot'    => '{}',

@@ -37,6 +37,15 @@ class GenerateStoreInsights extends BaseJob
      */
     public string $context = '';
 
+    /**
+     * @var int|null The store to generate insights for, or null for all stores.
+     *
+     * Resolved from the triggering request and carried explicitly rather than
+     * re-resolved at execute() time, since queue workers run in the primary site's
+     * context and could otherwise resolve the wrong store on a multi-store install.
+     */
+    public ?int $storeId = null;
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -60,11 +69,11 @@ class GenerateStoreInsights extends BaseJob
         }
 
         try {
-            $stats = OrderLifecycle::getInstance()->getStats()->getStoreInsightStats($this->days);
+            $stats = OrderLifecycle::getInstance()->getStats()->getStoreInsightStats($this->days, $this->storeId);
             $prompt = $ai->buildStorePrompt($stats, $this->days, $this->context);
 
             $insights = $ai->generateInsights($apiKey, $prompt);
-            $ai->saveStoreInsights($insights, $this->days);
+            $ai->saveStoreInsights($insights, $this->days, $this->storeId);
         } catch (Throwable $e) {
             // re-throw so the job shows as failed/retryable in the Queue
             // Manager instead of silently succeeding with no insights saved

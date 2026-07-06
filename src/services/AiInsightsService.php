@@ -39,7 +39,10 @@ class AiInsightsService extends Component
     public const MODEL = 'claude-haiku-4-5-20251001';
 
     /**
-     * @var string The cache key under which the latest store insights are stored.
+     * @var string The cache key prefix under which the latest store insights are stored.
+     *
+     * Suffixed with the store ID by {@see storeInsightsCacheKey()} so multi-store installs
+     * don't clobber one store's cached insights with another's.
      */
     public const STORE_INSIGHTS_CACHE_KEY = 'orderlifecycle_store_insights';
 
@@ -374,11 +377,12 @@ class AiInsightsService extends Component
      *
      * @param string $insights The generated insight text.
      * @param int $days The look-back window the insights cover.
+     * @param int|null $storeId The store these insights were generated for, or null for all stores.
      * @return array The stored payload (insights, days, generatedAt).
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public function saveStoreInsights(string $insights, int $days): array
+    public function saveStoreInsights(string $insights, int $days, ?int $storeId = null): array
     {
         $saved = [
             'insights' => $insights,
@@ -386,7 +390,7 @@ class AiInsightsService extends Component
             'generatedAt' => (new \DateTime())->format('c'),
         ];
 
-        Craft::$app->getCache()->set(self::STORE_INSIGHTS_CACHE_KEY, $saved, self::STORE_INSIGHTS_CACHE_DURATION);
+        Craft::$app->getCache()->set($this->storeInsightsCacheKey($storeId), $saved, self::STORE_INSIGHTS_CACHE_DURATION);
 
         return $saved;
     }
@@ -394,13 +398,14 @@ class AiInsightsService extends Component
     /**
      * Loads the most recent store-wide insights from the cache.
      *
+     * @param int|null $storeId The store to load insights for, or null for all stores.
      * @return array|null The stored payload, or null if none exists.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public function getSavedStoreInsights(): ?array
+    public function getSavedStoreInsights(?int $storeId = null): ?array
     {
-        $saved = Craft::$app->getCache()->get(self::STORE_INSIGHTS_CACHE_KEY);
+        $saved = Craft::$app->getCache()->get($this->storeInsightsCacheKey($storeId));
 
         return is_array($saved) ? $saved : null;
     }
@@ -421,6 +426,19 @@ class AiInsightsService extends Component
     // =========================================================================
     // Private Methods
     // =========================================================================
+
+    /**
+     * Builds the store-scoped cache key for {@see saveStoreInsights()}/{@see getSavedStoreInsights()}.
+     *
+     * @param int|null $storeId The store to scope the key to, or null for all stores.
+     * @return string The cache key.
+     * @author John Henry Donovan
+     * @since 1.0.1
+     */
+    private function storeInsightsCacheKey(?int $storeId): string
+    {
+        return self::STORE_INSIGHTS_CACHE_KEY . '_' . ($storeId ?? 'all');
+    }
 
     /**
      * Wraps untrusted, customer-supplied content in an explicit delimiter block.

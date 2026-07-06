@@ -230,6 +230,7 @@ class OrderLifecycleLogger extends Component
 
         $logData = [
             'orderId' => $orderId,
+            'storeId' => $order->storeId,
             'type' => $type->value,
             'message' => $message,
             'snapshot' => Json::encode($currentSnapshot),
