@@ -46,11 +46,10 @@ class StatsService extends Component
      */
     public function getStats(int $days): array
     {
-        // scope to the current store so stats don't bleed across stores
+        // scope everything to the current store
         $storeId = $this->_resolveStoreId();
 
-        // storeId in the key too, or one store's cached snapshot would get
-        // served to another store for up to 5 minutes on a multi-store install
+        // key the cache by store as well as period, so each store gets its own snapshot
         $cacheKey = 'orderlifecycle_stats_' . $days . '_' . ($storeId ?? 'all');
         $cached = Craft::$app->getCache()->get($cacheKey);
 
@@ -189,9 +188,8 @@ class StatsService extends Component
         $this->_scopeLogsToStore($uniqueOrdersQuery, $storeId);
         $uniqueOrders = (int)$uniqueOrdersQuery->count('DISTINCT [[orderId]]');
 
-        // reuse the corrected totals (pre-plugin orders included) and the same
-        // 1-hour-inactivity abandonment definition used by the stats widget, instead
-        // of re-deriving them from raw log counts and drifting out of sync again
+        // conversion and abandonment come from the same helpers the dashboard
+        // widget uses, so both surfaces always show the same numbers
         $conversionStats = $this->getConversionStats($since, $storeId);
         $cartsCreated = $conversionStats['cartsCreated'];
         $ordersCompleted = $conversionStats['ordersCompleted'];
@@ -311,9 +309,9 @@ class StatsService extends Component
     /**
      * Constrains a `{{%orderlifecycle_logs}}` query to a single store.
      *
-     * A no-op when `$storeId` is null. Rows logged before the `storeId` column
-     * existed and whose order has since been deleted couldn't be backfilled and
-     * stay null, so they're naturally excluded from any store-scoped query.
+     * A no-op when `$storeId` is null. Rows with a null `storeId` (orphaned logs
+     * whose order was deleted before it could be backfilled) fall outside any
+     * store-scoped query.
      *
      * @param Query $query The logs query to constrain, mutated in place.
      * @param int|null $storeId The store to scope to, or null for all stores.
@@ -407,6 +405,11 @@ class StatsService extends Component
     /**
      * Calculates the conversion rate from carts to completed orders.
      *
+     * Only carts that had an item added (or that completed) count toward "carts created", so empty
+     * per-visitor session carts are left out of the denominator, matching how abandonment counts
+     * them. Orders that predate the plugin have no logs, so they're counted straight from Commerce's
+     * own table.
+     *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
      * @param int|null $storeId The Commerce store ID to scope order queries to, or null for all stores.
      * @return array The carts created, orders completed and conversion rate.
@@ -415,11 +418,24 @@ class StatsService extends Component
      */
     private function getConversionStats(?string $sinceDateDb, ?int $storeId = null): array
     {
+        // a real cart is one an item was added to, or one that completed (a
+        // completed order always had items). Counting only these leaves empty
+        // carts - the per-visitor session carts Commerce opens - out of the
+        // denominator, the same way abandonment leaves them out. The
+        // orderCompleted side also keeps every completed order in the count, so
+        // the rate can't come out above 100%.
+        $realCartIds = (new Query())
+            ->select('orderId')
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['type' => ['lineItemAdded', 'orderCompleted']])
+            ->andFilterWhere(['storeId' => $storeId]);
+
         $cartsCreated = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['type' => 'cartCreated'])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
             ->andFilterWhere(['storeId' => $storeId])
+            ->andWhere(['orderId' => $realCartIds])
             ->count('DISTINCT [[orderId]]');
 
         $ordersCompleted = (new Query())
@@ -580,14 +596,16 @@ class StatsService extends Component
      *
      * A cart counts as abandoned once it's gone {@see ABANDONMENT_THRESHOLD_SECONDS} (1 hour)
      * since its last activity (`dateUpdated`, which Commerce bumps on every recalculation) without
-     * completing. Carts still within that window are "in progress" - not completed, but not yet
-     * abandoned either - so they're excluded from both the numerator and, implicitly, from being
-     * miscounted as abandoned.
+     * completing. Carts still within that window are "in progress" - not completed, but not
+     * abandoned either - so they don't count.
      *
-     * Queries `{{%commerce_orders}}` directly (scoped to the same store and window as
-     * {@see getConversionStats()}) rather than the logs table, since the logs table has no record
-     * of "still active" state - only discrete events. `cartsCreated` for the rate's denominator is
-     * taken from `$conversionStats`, which already corrects for pre-plugin orders.
+     * The last-touched time only lives on `{{%commerce_orders}}`, so the idle check reads from there.
+     * The count is limited to carts with both a `cartCreated` and a `lineItemAdded` log: `cartCreated`
+     * keeps it within the same carts the `cartsCreated` denominator (from `$conversionStats`) divides
+     * by, and `lineItemAdded` leaves out empty carts - both the per-visitor session carts Commerce
+     * spins up and tracked carts a shopper never filled. So abandonment leans on line-item logging,
+     * which is on by default; with "Log Line Item Changes" off there are no `lineItemAdded` logs and
+     * the rate reads as zero.
      *
      * @param string|null $sinceDateDb The DB-formatted lower date bound, or null for all time.
      * @param int|null $storeId The store to scope counts to, or null for all stores.
@@ -603,12 +621,31 @@ class StatsService extends Component
             DateTimeHelper::toDateTime('-' . self::ABANDONMENT_THRESHOLD_SECONDS . ' seconds')
         );
 
+        // only count a cart the plugin tracked as created (cartCreated) and saw
+        // an item added to (lineItemAdded). cartCreated keeps it within the same
+        // carts the conversion rate divides by; lineItemAdded leaves out empty
+        // carts - Commerce's per-visitor session carts, and carts a shopper
+        // opened but never put anything in
+        $trackedCartIds = (new Query())
+            ->select('orderId')
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['type' => 'cartCreated'])
+            ->andFilterWhere(['storeId' => $storeId]);
+
+        $cartsWithAnItem = (new Query())
+            ->select('orderId')
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['type' => 'lineItemAdded'])
+            ->andFilterWhere(['storeId' => $storeId]);
+
         $abandoned = (new Query())
             ->from('{{%commerce_orders}}')
             ->where(['isCompleted' => false])
             ->andFilterWhere(['storeId' => $storeId])
             ->andFilterWhere(['>=', 'dateCreated', $sinceDateDb])
             ->andWhere(['<=', 'dateUpdated', $cutoff])
+            ->andWhere(['id' => $trackedCartIds])
+            ->andWhere(['id' => $cartsWithAnItem])
             ->count();
 
         $cartsCreated = $conversionStats['cartsCreated'];

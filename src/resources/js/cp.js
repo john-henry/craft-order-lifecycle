@@ -470,24 +470,12 @@
                 const data = response.data;
 
                 if (!data.success) {
-                    this.errorEl.textContent = data.error || 'Failed to queue insights.';
+                    this.errorEl.textContent = data.error || 'Failed to generate insights.';
                     this.errorEl.classList.remove('hidden');
                     return;
                 }
 
-                // Generation runs on the queue; poll the status endpoint until
-                // the result is ready.
-                const result = await this.pollForResult(data.days);
-
-                if (result) {
-                    this.renderResult(result.insights, result.days);
-                } else {
-                    this.errorEl.textContent = Craft.t(
-                        'order-lifecycle',
-                        'Insights are still generating. Refresh in a moment.'
-                    );
-                    this.errorEl.classList.remove('hidden');
-                }
+                this.renderResult(data.insights, data.days);
             } catch (err) {
                 const msg = err.response && err.response.data && err.response.data.error
                     ? err.response.data.error
@@ -499,32 +487,6 @@
                 this.btn.disabled = false;
                 this.spinner.classList.add('hidden');
             }
-        }
-
-        async pollForResult(requestedDays) {
-            const maxAttempts = 20;
-            const intervalMs = 3000;
-
-            for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                await new Promise((resolve) => setTimeout(resolve, intervalMs));
-
-                let response;
-                try {
-                    response = await Craft.sendActionRequest(
-                        'GET',
-                        'order-lifecycle/ai/store-insights-status'
-                    );
-                } catch (err) {
-                    continue;
-                }
-
-                const data = response.data;
-                if (data.success && data.ready && data.days === requestedDays) {
-                    return data;
-                }
-            }
-
-            return null;
         }
 
         renderResult(insights, days) {
@@ -570,7 +532,10 @@
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.ol-ai-copy-btn');
             if (!btn) return;
-            const text = btn.dataset.copy;
+            // copy the rendered, readable text rather than the raw markdown source
+            const result = btn.closest('.ol-ai-widget-result');
+            const rendered = result ? result.querySelector('.ol-ai-widget-text') : null;
+            const text = rendered ? rendered.innerText.trim() : (btn.dataset.copy || '');
             if (navigator.clipboard && text) {
                 navigator.clipboard.writeText(text).then(() => {
                     const orig = btn.textContent;

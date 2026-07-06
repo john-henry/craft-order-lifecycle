@@ -8,6 +8,7 @@ namespace johnhenry\orderlifecycle\services;
 
 use Craft;
 use craft\base\Component;
+use craft\commerce\Plugin as Commerce;
 use craft\helpers\Json;
 use johnhenry\orderlifecycle\OrderLifecycle;
 use JsonException;
@@ -430,13 +431,19 @@ class AiInsightsService extends Component
     /**
      * Builds the store-scoped cache key for {@see saveStoreInsights()}/{@see getSavedStoreInsights()}.
      *
-     * @param int|null $storeId The store to scope the key to, or null for all stores.
+     * Falls back to the current Commerce store when no id is passed, so a save
+     * that names the store explicitly and a read that doesn't still land on the
+     * same key.
+     *
+     * @param int|null $storeId The store to scope the key to, or null for the current store.
      * @return string The cache key.
      * @author John Henry Donovan
      * @since 1.0.1
      */
     private function storeInsightsCacheKey(?int $storeId): string
     {
+        $storeId ??= Commerce::getInstance()?->getStores()->getCurrentStore()->id;
+
         return self::STORE_INSIGHTS_CACHE_KEY . '_' . ($storeId ?? 'all');
     }
 

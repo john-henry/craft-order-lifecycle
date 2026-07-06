@@ -931,10 +931,24 @@
     padding: 4px 0 12px;
 }
 
-/* same card treatment as the per-order "Order analysis" panel - see
-   .lifecycle-analysis-card above */
+/* The store-insights widget sits in its own dashboard tile and the page in the
+   control panel's content pane, and the report itself (.ol-ai-widget-result)
+   already provides the panel - so the outer card doesn't need its own box on
+   top, which would read as a border inside a border. The per-order "Order
+   analysis" panel isn't an .ol-ai-widget, so it keeps its card. */
 .ol-ai-widget.lifecycle-analysis-card {
-    padding: 14px 16px;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    background: none;
+}
+
+/* lead paragraph at the top of the full-page AI Insights view */
+.ol-ai-page-intro {
+    max-width: 48em;
+    margin: 0 0 18px;
+    font-size: 13px;
+    color: var(--light-text-color);
 }
 
 .ol-ai-widget-result {
