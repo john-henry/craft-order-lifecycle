@@ -228,6 +228,12 @@ class OrderLifecycleLogger extends Component
         // microsecond precision so same-second events keep their insert order
         $now = (new DateTimeImmutable('now'))->format('Y-m-d H:i:s.u');
 
+        // getUserIP() only exists on the web request; when this runs on the
+        // queue (LogOrderEventDeferredJob, or any listener firing inside another
+        // queue job) the request is a console request with no client IP to
+        // capture, so record null rather than calling a method that isn't there.
+        $request = Craft::$app->getRequest();
+
         $logData = [
             'orderId' => $orderId,
             'storeId' => $order->storeId,
@@ -235,7 +241,7 @@ class OrderLifecycleLogger extends Component
             'message' => $message,
             'snapshot' => Json::encode($currentSnapshot),
             'userId' => $settings->collectUserId ? Craft::$app->getUser()->getId() : null,
-            'ip' => $settings->collectUserIp ? Craft::$app->getRequest()->getUserIP() : null,
+            'ip' => $settings->collectUserIp && !$request->getIsConsoleRequest() ? $request->getUserIP() : null,
             'dateCreated' => $now,
             'dateUpdated' => $now,
             'uid' => Craft::$app->getSecurity()->generateRandomString(),
