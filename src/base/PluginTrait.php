@@ -16,6 +16,7 @@ use craft\commerce\events\ProcessPaymentEvent;
 use craft\commerce\events\RefundTransactionEvent;
 use craft\commerce\events\TransactionEvent;
 use craft\commerce\queue\jobs\SendEmail as SendEmailJob;
+use craft\commerce\records\Transaction as TransactionRecord;
 use craft\commerce\services\Emails;
 use craft\commerce\services\OrderHistories;
 use craft\commerce\services\Payments;
@@ -284,18 +285,25 @@ trait PluginTrait
     {
         // Remove logs when an order is deleted so they don't skew stats.
         Event::on(Order::class, Element::EVENT_AFTER_DELETE, static function($e) use ($logger) {
-            /** @var Order $order */
-            $order = $e->sender;
-            if ($order->id) {
-                $logger->deleteLogsForOrder((int)$order->id);
-            }
+            self::_logSafely(static function() use ($logger, $e) {
+                /** @var Order $order */
+                $order = $e->sender;
+                if ($order->id) {
+                    $logger->deleteLogsForOrder((int)$order->id);
+                }
+            });
         });
 
-        // Cart created/updated + granular change detection.
+        // Cart created/updated + granular change detection. Fires from
+        // Order::updateOrderPaidInformation() inside Commerce's payment
+        // try/catch on a successful charge, so a logging failure here must be
+        // contained (see _logSafely()) or it would report the payment as failed.
         Event::on(Order::class, Element::EVENT_AFTER_SAVE, static function($e) use ($logger) {
-            /** @var Order $order */
-            $order = $e->sender;
-            $logger->logOrderSaveChanges($order, (bool)$e->isNew);
+            self::_logSafely(static function() use ($logger, $e) {
+                /** @var Order $order */
+                $order = $e->sender;
+                $logger->logOrderSaveChanges($order, (bool)$e->isNew);
+            });
         });
     }
 
@@ -311,19 +319,23 @@ trait PluginTrait
     {
         Event::on(Order::class, Order::EVENT_AFTER_APPLY_ADD_LINE_ITEM,
             static function(LineItemEvent $e) use ($logger) {
-                $li = $e->lineItem;
-                $logger->log($li->getOrder(), EventType::LINE_ITEM_ADDED, [
-                    'sku' => $li->sku, 'qty' => $li->qty, 'subtotal' => $li->getSubtotal(),
-                ]);
+                self::_logSafely(static function() use ($logger, $e) {
+                    $li = $e->lineItem;
+                    $logger->log($li->getOrder(), EventType::LINE_ITEM_ADDED, [
+                        'sku' => $li->sku, 'qty' => $li->qty, 'subtotal' => $li->getSubtotal(),
+                    ]);
+                });
             }
         );
 
         Event::on(Order::class, Order::EVENT_AFTER_APPLY_REMOVE_LINE_ITEM,
             static function(LineItemEvent $e) use ($logger) {
-                $li = $e->lineItem;
-                $logger->log($li->getOrder(), EventType::LINE_ITEM_REMOVED, [
-                    'sku' => $li->sku, 'qty' => $li->qty,
-                ]);
+                self::_logSafely(static function() use ($logger, $e) {
+                    $li = $e->lineItem;
+                    $logger->log($li->getOrder(), EventType::LINE_ITEM_REMOVED, [
+                        'sku' => $li->sku, 'qty' => $li->qty,
+                    ]);
+                });
             }
         );
     }
@@ -340,11 +352,13 @@ trait PluginTrait
     {
         Event::on(OrderHistories::class, OrderHistories::EVENT_ORDER_STATUS_CHANGE,
             static function(OrderStatusEvent $e) use ($logger) {
-                $order = $e->order;
-                $logger->log($order, EventType::STATUS_CHANGED, [
-                    'oldStatusId' => $e->orderHistory->prevStatusId ?? null,
-                    'newStatusId' => $order->orderStatusId,
-                ]);
+                self::_logSafely(static function() use ($logger, $e) {
+                    $order = $e->order;
+                    $logger->log($order, EventType::STATUS_CHANGED, [
+                        'oldStatusId' => $e->orderHistory->prevStatusId ?? null,
+                        'newStatusId' => $order->orderStatusId,
+                    ]);
+                });
             }
         );
     }
@@ -363,11 +377,13 @@ trait PluginTrait
         if ($settings->logOrderComplete) {
             Event::on(Order::class, Order::EVENT_AFTER_COMPLETE_ORDER,
                 static function($e) use ($logger) {
-                    /** @var Order $order */
-                    $order = $e->sender;
-                    $logger->log($order, EventType::ORDER_COMPLETED, [
-                        'totalPrice' => $order->getTotalPrice(), 'currency' => $order->currency,
-                    ]);
+                    self::_logSafely(static function() use ($logger, $e) {
+                        /** @var Order $order */
+                        $order = $e->sender;
+                        $logger->log($order, EventType::ORDER_COMPLETED, [
+                            'totalPrice' => $order->getTotalPrice(), 'currency' => $order->currency,
+                        ]);
+                    });
                 }
             );
         }
@@ -375,14 +391,16 @@ trait PluginTrait
         if ($settings->logOrderPaid) {
             Event::on(Order::class, Order::EVENT_AFTER_ORDER_PAID,
                 static function($e) use ($logger) {
-                    /** @var Order $order */
-                    $order = $e->sender;
-                    $lastTransaction = $order->getLastTransaction();
-                    $logger->log($order, EventType::ORDER_PAID, [
-                        'totalPaid' => $order->getTotalPaid(),
-                        'currency' => $order->currency,
-                        'gatewayName' => $lastTransaction?->getGateway()?->name,
-                    ]);
+                    self::_logSafely(static function() use ($logger, $e) {
+                        /** @var Order $order */
+                        $order = $e->sender;
+                        $lastTransaction = $order->getLastTransaction();
+                        $logger->log($order, EventType::ORDER_PAID, [
+                            'totalPaid' => $order->getTotalPaid(),
+                            'currency' => $order->currency,
+                            'gatewayName' => $lastTransaction?->getGateway()?->name,
+                        ]);
+                    });
                 }
             );
         }
@@ -390,11 +408,13 @@ trait PluginTrait
         if ($settings->logPaymentAuthorized) {
             Event::on(Order::class, Order::EVENT_AFTER_ORDER_AUTHORIZED,
                 static function($e) use ($logger) {
-                    /** @var Order $order */
-                    $order = $e->sender;
-                    $logger->log($order, EventType::PAYMENT_AUTHORIZED, [
-                        'totalAuthorized' => $order->getTotalPaid(),
-                    ]);
+                    self::_logSafely(static function() use ($logger, $e) {
+                        /** @var Order $order */
+                        $order = $e->sender;
+                        $logger->log($order, EventType::PAYMENT_AUTHORIZED, [
+                            'totalAuthorized' => $order->getTotalPaid(),
+                        ]);
+                    });
                 }
             );
         }
@@ -414,22 +434,39 @@ trait PluginTrait
         if ($settings->logPaymentAttempts) {
             Event::on(Payments::class, Payments::EVENT_AFTER_PROCESS_PAYMENT,
                 static function(ProcessPaymentEvent $e) use ($logger) {
-                    $success = $e->transaction->status === 'success';
+                    self::_logSafely(static function() use ($logger, $e) {
+                        $status = $e->transaction->status;
 
-                    // a successful first try gets no attempt entry, only failures do
-                    if (!$success) {
-                        $logger->log($e->order, EventType::PAYMENT_ATTEMPT, [
-                            'transactionType' => $e->transaction->type,
+                        // Offsite and PaymentIntent gateways (Stripe) return an
+                        // intermediate status when a payment is created but not yet
+                        // resolved: pending while it waits, redirect when the customer
+                        // is sent offsite, processing while the gateway settles. Stripe's
+                        // initial "requires_payment_method" surfaces here as one of these,
+                        // and it is the normal starting state of every checkout, not a
+                        // failure. Only a terminal success or failure is a real outcome,
+                        // so anything else is neither an attempt nor a processed payment.
+                        if ($status !== TransactionRecord::STATUS_SUCCESS
+                            && $status !== TransactionRecord::STATUS_FAILED) {
+                            return;
+                        }
+
+                        $success = $status === TransactionRecord::STATUS_SUCCESS;
+
+                        // a successful first try gets no attempt entry, only failures do
+                        if (!$success) {
+                            $logger->log($e->order, EventType::PAYMENT_ATTEMPT, [
+                                'transactionType' => $e->transaction->type,
+                            ]);
+                        }
+
+                        $logger->log($e->order, EventType::PAYMENT_PROCESSED, [
+                            'success' => $success,
+                            'transactionId' => $e->transaction->id,
+                            'gatewayName' => $e->transaction->getGateway()?->name,
+                            'amount' => $e->transaction->amount,
+                            'currency' => $e->transaction->currency,
                         ]);
-                    }
-
-                    $logger->log($e->order, EventType::PAYMENT_PROCESSED, [
-                        'success' => $success,
-                        'transactionId' => $e->transaction->id,
-                        'gatewayName' => $e->transaction->getGateway()?->name,
-                        'amount' => $e->transaction->amount,
-                        'currency' => $e->transaction->currency,
-                    ]);
+                    });
                 }
             );
         }
@@ -437,11 +474,13 @@ trait PluginTrait
         if ($settings->logPaymentCaptured) {
             Event::on(Payments::class, Payments::EVENT_AFTER_CAPTURE_TRANSACTION,
                 static function(TransactionEvent $e) use ($logger) {
-                    $logger->log($e->transaction->getOrder(), EventType::PAYMENT_CAPTURED, [
-                        'transactionId' => $e->transaction->id,
-                        'type' => $e->transaction->type,
-                        'amount' => $e->transaction->amount,
-                    ]);
+                    self::_logSafely(static function() use ($logger, $e) {
+                        $logger->log($e->transaction->getOrder(), EventType::PAYMENT_CAPTURED, [
+                            'transactionId' => $e->transaction->id,
+                            'type' => $e->transaction->type,
+                            'amount' => $e->transaction->amount,
+                        ]);
+                    });
                 }
             );
         }
@@ -449,15 +488,17 @@ trait PluginTrait
         if ($settings->logPaymentRefunded) {
             Event::on(Payments::class, Payments::EVENT_AFTER_REFUND_TRANSACTION,
                 static function(RefundTransactionEvent $e) use ($logger) {
-                    $logger->log($e->transaction->getOrder(), EventType::PAYMENT_REFUNDED, [
-                        'transactionId' => $e->transaction->id,
-                        'parentId' => $e->transaction->parentId,
-                        'type' => $e->transaction->type,
-                        'amount' => $e->amount,
-                        'currency' => $e->transaction->currency,
-                        'gatewayName' => $e->transaction->getGateway()?->name,
-                        'note' => $e->refundTransaction->note,
-                    ]);
+                    self::_logSafely(static function() use ($logger, $e) {
+                        $logger->log($e->transaction->getOrder(), EventType::PAYMENT_REFUNDED, [
+                            'transactionId' => $e->transaction->id,
+                            'parentId' => $e->transaction->parentId,
+                            'type' => $e->transaction->type,
+                            'amount' => $e->amount,
+                            'currency' => $e->transaction->currency,
+                            'gatewayName' => $e->transaction->getGateway()?->name,
+                            'note' => $e->refundTransaction->note,
+                        ]);
+                    });
                 }
             );
         }
@@ -465,8 +506,53 @@ trait PluginTrait
         if ($settings->logPaymentTransactions) {
             Event::on(Transactions::class, Transactions::EVENT_AFTER_SAVE_TRANSACTION,
                 static function(TransactionEvent $e) use ($logger) {
-                    $logger->logTransaction($e->transaction);
+                    self::_logSafely(static function() use ($logger, $e) {
+                        $logger->logTransaction($e->transaction);
+                    });
                 }
+            );
+        }
+    }
+
+    /**
+     * Runs a logging callback in isolation so a failure inside it can never
+     * propagate into the Commerce operation it fires from.
+     *
+     * Every listener that logs as a side effect of another operation routes
+     * through here. The payment and transaction listeners are the sharpest
+     * case: several fire within the try/catch in
+     * {@see \craft\commerce\services\Payments::processPayment()} that turns any
+     * caught exception into a PaymentException and reports the payment as
+     * failed. The gateway charge can already have gone through by the time the
+     * event fires, so letting a logging error (a DB deadlock, a snapshot build
+     * problem, a queue push failure) escape would make a successful payment
+     * look failed and invite the shopper to pay again, taking a second charge;
+     * the same holds for a capture or refund that has already moved money. The
+     * email listeners have the equivalent problem one layer out: they run
+     * inside Commerce's SendEmailJob, where an escaping error fails the job and
+     * has Commerce resend the mail on retry, and inside the queue's own
+     * after-error handler, where it would derail the queue worker. Logging is a
+     * side effect and must never affect the operation it observes, so any
+     * throwable is logged and swallowed here.
+     *
+     * @param callable $fn The logging work to run.
+     * @return void
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private static function _logSafely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable $e) {
+            // Include the class and stack trace: if logging fails systematically
+            // (logs table gone, cache/queue backend down) every timeline silently
+            // gains gaps, and this line is the only signal, so it has to carry
+            // enough to diagnose the cause rather than just "something failed".
+            Craft::error(
+                'Failed to log an order lifecycle event: ' . $e::class . ': ' . $e->getMessage()
+                . "\n" . $e->getTraceAsString(),
+                'order-lifecycle',
             );
         }
     }
@@ -484,12 +570,12 @@ trait PluginTrait
         // these run inside Commerce's SendEmailJob::execute(), so they use
         // logDeferred() instead of log() - building a full snapshot inline
         // eats into the job's time-to-reserve, and if it runs out Commerce
-        // resends the email on retry. wrapped in try/catch too, so a logging
-        // failure here can never take the actual send down with it
+        // resends the email on retry. routed through _logSafely() too, so a
+        // logging failure here can never take the actual send down with it
         Event::on(Emails::class, Emails::EVENT_BEFORE_SEND_MAIL,
             static function(MailEvent $e) use ($logger) {
                 if ($e->isValid === false) {
-                    try {
+                    self::_logSafely(static function() use ($logger, $e) {
                         $logger->logDeferred((int)$e->order->id, EventType::EMAIL_FAILED, [
                             // craftEmail->name isn't populated by Commerce - use commerceEmail
                             'name' => $e->commerceEmail->name ?? null,
@@ -497,44 +583,44 @@ trait PluginTrait
                             'to' => $e->craftEmail->to ?? null,
                             'reason' => 'Email sending was prevented (isValid = false)',
                         ], 'Email sending was prevented');
-                    } catch (Throwable $exception) {
-                        Craft::error('Failed to queue EMAIL_FAILED log: ' . $exception->getMessage(), 'order-lifecycle');
-                    }
+                    });
                 }
             }
         );
 
         Event::on(Emails::class, Emails::EVENT_AFTER_SEND_MAIL,
             static function(MailEvent $e) use ($logger) {
-                try {
+                self::_logSafely(static function() use ($logger, $e) {
                     $logger->logDeferred((int)$e->order->id, EventType::EMAIL_SENT, [
                         // craftEmail->name isn't populated by Commerce - use commerceEmail
                         'name' => $e->commerceEmail->name ?? null,
                         'subject' => $e->craftEmail->subject ?? null,
                         'to' => $e->craftEmail->to ?? null,
                     ]);
-                } catch (Throwable $exception) {
-                    Craft::error('Failed to queue EMAIL_SENT log: ' . $exception->getMessage(), 'order-lifecycle');
-                }
+                });
             }
         );
 
-        // Intercept Commerce SendEmail queue job failures.
+        // Intercept Commerce SendEmail queue job failures. Fires from the
+        // queue's own after-error handler, so a logging failure here must not
+        // escape and derail the worker - _logSafely() keeps it contained.
         Event::on(Queue::class, QueueAlias::EVENT_AFTER_ERROR,
             static function(ExecEvent $e) use ($logger) {
                 if (!$e->job instanceof SendEmailJob) {
                     return;
                 }
 
-                $logger->logFailedEmailJob(
-                    $e->job->orderId ?? null,
-                    $e->job->emailId ?? null,
-                    $e->job->number ?? null,
-                    $e->job->reference ?? null,
-                    $e->attempt,
-                    $e->id ?? null,
-                    $e->error,
-                );
+                self::_logSafely(static function() use ($logger, $e) {
+                    $logger->logFailedEmailJob(
+                        $e->job->orderId ?? null,
+                        $e->job->emailId ?? null,
+                        $e->job->number ?? null,
+                        $e->job->reference ?? null,
+                        $e->attempt,
+                        $e->id ?? null,
+                        $e->error,
+                    );
+                });
             }
         );
     }

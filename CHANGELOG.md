@@ -1,5 +1,12 @@
 # Release Notes for Order Lifecycle
 
+## 1.0.4 - 2026-07-08
+
+### Fixed
+- Order events that get logged in the background no longer fail on the queue. Anything logged from a queue job, like the events tied to your order emails, was falling over with an error and never being recorded, because the plugin was trying to read the shopper's IP address in a place where there's no browser request to read it from. It now records no IP in that situation and logs the event as normal.
+- A normal Stripe checkout is no longer recorded as a failed payment. When Stripe first sets up a payment it reports back a starting state that every checkout goes through, and the plugin was mistaking that for a failed attempt, so the AI insights would count a perfectly good order as having a failed payment. It now only counts a payment as failed when the gateway actually says it failed.
+- A problem while logging an order event can no longer knock the order itself off course. A lot of this logging runs right inside Commerce's own work: when a payment, capture or refund goes through, when an order is marked paid or completed, or when an order email is sent. If writing a log entry ever failed in the middle of that, Commerce could treat a payment that had already gone through as failed and send the shopper back to pay again, or resend an email. Every bit of order logging is now kept to itself and written to the error log, well away from the payment, the order and the email.
+
 ## 1.0.3 - 2026-07-06
 
 ### Changed
