@@ -1,7 +1,9 @@
 <?php
 
+use craft\elements\Address;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
+use johnhenry\orderlifecycle\services\OrderLifecycleLogger;
 
 // ---------------------------------------------------------------------------
 // Coupon events
@@ -112,6 +114,19 @@ describe('EVENT_AFTER_SAVE: shipping method changes', function () {
 
         expect(logCount($order->id, EventType::SHIPPING_METHOD_SET))->toBe(1);
     });
+
+    it('does not log SHIPPING_METHOD_SET when the handle only flips between null and empty string', function () {
+        // Commerce toggles shippingMethodHandle between null and '' during
+        // checkout recalculation without a method being chosen. Both mean "no
+        // method", so this churn must not log a phantom SHIPPING_METHOD_SET
+        // (previously it did, with a null handle and no change to describe).
+        $order = orderWithSnapshot(); // snapshot: shippingMethodHandle = null
+
+        $order->shippingMethodHandle = '';
+        reSave($order);
+
+        expect(logCount($order->id, EventType::SHIPPING_METHOD_SET))->toBe(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -149,6 +164,48 @@ describe('generateChangeDescription: country changes', function () {
         $message = $logger->generateChangeDescription($snapshot, $snapshot, EventType::SHIPPING_METHOD_SET);
 
         expect($message)->toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Address snapshot normalisation
+//
+// _serializeAddress() coerces '' to null per field so that a null<->'' flip in
+// an untouched optional field (Commerce/Craft can store either) doesn't make
+// the whole-array comparison in _logAddressChanges() read as a real change and
+// log a phantom *_ADDRESS_SET event, the address-field equivalent of the
+// shipping-method churn.
+// ---------------------------------------------------------------------------
+
+describe('_serializeAddress: empty-string normalisation', function () {
+    it('serialises an empty-string field to null', function () {
+        $method = new ReflectionMethod(OrderLifecycleLogger::class, '_serializeAddress');
+
+        $serialized = $method->invoke(null, new Address([
+            'addressLine1' => '12 Cois Coille',
+            'addressLine2' => '',
+            'countryCode' => 'IE',
+        ]));
+
+        expect($serialized['addressLine2'])->toBeNull()
+            ->and($serialized['addressLine1'])->toBe('12 Cois Coille');
+    });
+
+    it('serialises a null<->empty-string flip identically, so no phantom change is seen', function () {
+        $method = new ReflectionMethod(OrderLifecycleLogger::class, '_serializeAddress');
+
+        $withEmpty = $method->invoke(null, new Address([
+            'addressLine1' => '12 Cois Coille',
+            'addressLine2' => '',
+            'countryCode' => 'IE',
+        ]));
+        $withNull = $method->invoke(null, new Address([
+            'addressLine1' => '12 Cois Coille',
+            'addressLine2' => null,
+            'countryCode' => 'IE',
+        ]));
+
+        expect($withEmpty)->toBe($withNull);
     });
 });
 

@@ -1155,7 +1155,12 @@ class OrderLifecycleLogger extends Component
         $before = $previous['order']['shippingMethodHandle'] ?? null;
         $after = $order->shippingMethodHandle;
 
-        if ($before === $after) {
+        // Commerce flips shippingMethodHandle between null and '' during
+        // checkout recalculation without a method ever being chosen (e.g. on
+        // the shipping step with a single free method not yet submitted). Both
+        // mean "no method", so treat them as equal, or the churn logs a phantom
+        // SHIPPING_METHOD_SET with a null handle and no real change to describe.
+        if (($before ?? '') === ($after ?? '')) {
             return;
         }
 
@@ -1362,7 +1367,7 @@ class OrderLifecycleLogger extends Component
             return null;
         }
 
-        return [
+        $fields = [
             'firstName' => $address->firstName,
             'lastName' => $address->lastName,
             'addressLine1' => $address->addressLine1,
@@ -1372,5 +1377,12 @@ class OrderLifecycleLogger extends Component
             'postalCode' => $address->postalCode,
             'countryCode' => $address->countryCode,
         ];
+
+        // Normalise '' to null per field: an optional address field left
+        // untouched can be stored as either, and _logAddressChanges() compares
+        // whole serialized arrays, so a null<->'' flip in any one field would
+        // otherwise read as a real address change and log a phantom
+        // SHIPPING_ADDRESS_SET / BILLING_ADDRESS_SET with nothing to describe.
+        return array_map(static fn($v) => $v === '' ? null : $v, $fields);
     }
 }
