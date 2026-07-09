@@ -1,5 +1,10 @@
 # Release Notes for Order Lifecycle
 
+## 1.0.5 - 2026-07-09
+
+### Fixed
+- Phantom timeline events are no longer logged when nothing really changed. On the shipping step, Commerce quietly toggles empty values between "nothing" and "empty" as it recalculates, both on the order's shipping method and on untouched address fields, and the timeline was treating that back-and-forth as a real change: you'd see a "Shipping Method Set" with no method and nothing to show. It now only logs when a shipping method or address genuinely changes.
+
 ## 1.0.4 - 2026-07-08
 
 ### Fixed
