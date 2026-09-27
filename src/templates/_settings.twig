@@ -37,6 +37,8 @@
          name: 'settings[showLifecycleStats]',
          on: settings.showLifecycleStats,
          errors: settings.getErrors('showLifecycleStats'),
+         warning: config.showLifecycleStats is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.showLifecycleStats is defined,
       }) }}
 
       <hr>
@@ -45,11 +47,12 @@
 
       {{ forms.lightswitchField({
          label: 'Async Queue Logging'|t('order-lifecycle'),
-         instructions: 'Write log entries via the Craft queue instead of inline during the order save. Recommended for high-volume stores to keep checkout fast. Requires the queue worker to be running.'|t('order-lifecycle'),
-         warning: 'Logs will not appear immediately - they are written when the queue processes the job. Ensure your queue worker is running before enabling this.'|t('order-lifecycle'),
+         instructions: 'Write log entries via the Craft queue instead of inline. Only the database write moves to the queue: each event is still worked out during the order save. Useful where log writes compete with a busy checkout. Requires the queue worker to be running.'|t('order-lifecycle'),
+         warning: config.asyncLogging is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle') : 'Logs will not appear immediately - they are written when the queue processes the job. Ensure your queue worker is running before enabling this.'|t('order-lifecycle'),
          name: 'settings[asyncLogging]',
          on: settings.asyncLogging,
          errors: settings.getErrors('asyncLogging'),
+         disabled: config.asyncLogging is defined,
       }) }}
    </div>
    <div id="logging" class="hidden">
@@ -62,6 +65,8 @@
          name: 'settings[logLineItems]',
          on: settings.logLineItems,
          errors: settings.getErrors('logLineItems'),
+         warning: config.logLineItems is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logLineItems is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -70,6 +75,8 @@
          name: 'settings[logStatusChanges]',
          on: settings.logStatusChanges,
          errors: settings.getErrors('logStatusChanges'),
+         warning: config.logStatusChanges is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logStatusChanges is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -78,6 +85,8 @@
          name: 'settings[logOrderComplete]',
          on: settings.logOrderComplete,
          errors: settings.getErrors('logOrderComplete'),
+         warning: config.logOrderComplete is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logOrderComplete is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -86,6 +95,8 @@
          name: 'settings[logOrderPaid]',
          on: settings.logOrderPaid,
          errors: settings.getErrors('logOrderPaid'),
+         warning: config.logOrderPaid is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logOrderPaid is defined,
       }) }}
 
       <hr>
@@ -98,6 +109,8 @@
          name: 'settings[logCustomerChanges]',
          on: settings.logCustomerChanges,
          errors: settings.getErrors('logCustomerChanges'),
+         warning: config.logCustomerChanges is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logCustomerChanges is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -106,6 +119,8 @@
          name: 'settings[logAddressChanges]',
          on: settings.logAddressChanges,
          errors: settings.getErrors('logAddressChanges'),
+         warning: config.logAddressChanges is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logAddressChanges is defined,
       }) }}
 
       <hr>
@@ -118,6 +133,8 @@
          name: 'settings[logShippingMethodChanges]',
          on: settings.logShippingMethodChanges,
          errors: settings.getErrors('logShippingMethodChanges'),
+         warning: config.logShippingMethodChanges is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logShippingMethodChanges is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -126,6 +143,8 @@
          name: 'settings[logCouponChanges]',
          on: settings.logCouponChanges,
          errors: settings.getErrors('logCouponChanges'),
+         warning: config.logCouponChanges is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logCouponChanges is defined,
       }) }}
 
       <hr>
@@ -138,6 +157,8 @@
          name: 'settings[logPaymentAttempts]',
          on: settings.logPaymentAttempts,
          errors: settings.getErrors('logPaymentAttempts'),
+         warning: config.logPaymentAttempts is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logPaymentAttempts is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -146,6 +167,8 @@
          name: 'settings[logPaymentAuthorized]',
          on: settings.logPaymentAuthorized,
          errors: settings.getErrors('logPaymentAuthorized'),
+         warning: config.logPaymentAuthorized is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logPaymentAuthorized is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -154,6 +177,8 @@
          name: 'settings[logPaymentCaptured]',
          on: settings.logPaymentCaptured,
          errors: settings.getErrors('logPaymentCaptured'),
+         warning: config.logPaymentCaptured is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logPaymentCaptured is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -162,15 +187,32 @@
          name: 'settings[logPaymentRefunded]',
          on: settings.logPaymentRefunded,
          errors: settings.getErrors('logPaymentRefunded'),
+         warning: config.logPaymentRefunded is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logPaymentRefunded is defined,
       }) }}
 
       {{ forms.lightswitchField({
          label: "Log All Payment Transactions"|t('order-lifecycle'),
          instructions: "Track every individual payment transaction state change, not just the summary events above."|t('order-lifecycle'),
-         warning: "This may generate a large number of log entries - leave off unless you're actively debugging a gateway."|t('order-lifecycle'),
+         warning: config.logPaymentTransactions is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle') : "This may generate a large number of log entries - leave off unless you're actively debugging a gateway."|t('order-lifecycle'),
          name: 'settings[logPaymentTransactions]',
          on: settings.logPaymentTransactions,
          errors: settings.getErrors('logPaymentTransactions'),
+         disabled: config.logPaymentTransactions is defined,
+      }) }}
+
+      <hr>
+
+      <h2>{{ "Email Events"|t('order-lifecycle') }}</h2>
+
+      {{ forms.lightswitchField({
+         label: "Log Email Sent Events"|t('order-lifecycle'),
+         instructions: "Track order emails Commerce sends, and the ones it fails to send."|t('order-lifecycle'),
+         name: 'settings[logEmailSent]',
+         on: settings.logEmailSent,
+         errors: settings.getErrors('logEmailSent'),
+         warning: config.logEmailSent is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.logEmailSent is defined,
       }) }}
 
       <hr>
@@ -180,10 +222,11 @@
       {{ forms.lightswitchField({
          label: "Collect User IP Address"|t('order-lifecycle'),
          instructions: "Store the IP address of users making changes to orders."|t('order-lifecycle'),
-         warning: "Consider privacy regulations (GDPR, CCPA) in your jurisdiction."|t('order-lifecycle'),
+         warning: config.collectUserIp is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle') : "Consider privacy regulations (GDPR, CCPA) in your jurisdiction."|t('order-lifecycle'),
          name: 'settings[collectUserIp]',
          on: settings.collectUserIp,
          errors: settings.getErrors('collectUserIp'),
+         disabled: config.collectUserIp is defined,
       }) }}
 
       {{ forms.lightswitchField({
@@ -192,12 +235,9 @@
          name: 'settings[collectUserId]',
          on: settings.collectUserId,
          errors: settings.getErrors('collectUserId'),
+         warning: config.collectUserId is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.collectUserId is defined,
       }) }}
-
-
-
-
-
 
    </div>
 
@@ -233,13 +273,14 @@
 
       {{ forms.autosuggestField({
          label: "Anthropic API Key"|t('order-lifecycle'),
-         instructions: "API key for Claude AI. Used to generate on-demand insights in the Order Lifecycle field. Leave blank to disable AI insights."|t('order-lifecycle'),
+         instructions: "An environment variable holding your Anthropic API key, like `$ANTHROPIC_API_KEY`. Used to generate on-demand insights in the Order Lifecycle field. Leave blank to disable AI insights."|t('order-lifecycle'),
          id: 'anthropicApiKey',
          name: 'anthropicApiKey',
          suggestEnvVars: true,
-         value: settings.anthropicApiKey,
+         value: config.anthropicApiKey is defined ? '' : settings.anthropicApiKey,
          errors: settings.getErrors('anthropicApiKey'),
          warning: config.anthropicApiKey is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.anthropicApiKey is defined,
       }) }}
 
       <hr>
@@ -259,6 +300,8 @@
             { label: "Narrative (plain bullet summary)"|t('order-lifecycle'), value: 'narrative' },
          ],
          errors: settings.getErrors('orderInsightsStyle'),
+         warning: config.orderInsightsStyle is defined ? 'This is being overridden by the `order-lifecycle.php` config file.'|t('order-lifecycle'),
+         disabled: config.orderInsightsStyle is defined,
       }) }}
 
       {{ forms.textareaField({

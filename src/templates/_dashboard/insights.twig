@@ -33,7 +33,7 @@
             <div class="ol-ai-widget-result">
                 <div class="ol-ai-widget-text ol-ai-markdown" data-raw="{{ saved.insights|e('html_attr') }}">{{ saved.insights|nl2br }}</div>
                 <div class="ol-ai-widget-meta">
-                    {{ 'Generated'|t('order-lifecycle') }} {{ saved.generatedAt|datetime('short') }}
+                    {{ 'Generated {date}'|t('order-lifecycle', { date: saved.generatedAt|datetime('short') }) }}
                     &middot;
                     {% if saved.days == 0 %}
                         {{ 'All time'|t('order-lifecycle') }}
@@ -61,7 +61,7 @@
                     <select id="ol-ai-days-select">
                         {% for d in [7, 14, 30, 60, 90] %}
                             <option value="{{ d }}"{% if d == 30 %} selected{% endif %}>
-                                {{ d ~ ' ' ~ 'days'|t('order-lifecycle') }}
+                                {{ '{days} days'|t('order-lifecycle', { days: d }) }}
                             </option>
                         {% endfor %}
                         <option value="0">{{ 'All time'|t('order-lifecycle') }}</option>
@@ -73,6 +73,7 @@
                 {{ (saved ? 'Refresh Insights' : 'Generate Insights')|t('order-lifecycle') }}
             </button>
             <span class="ol-ai-widget-spinner spinner hidden"></span>
+            <span class="visually-hidden ol-ai-widget-status" role="status" aria-live="polite"></span>
         </div>
 
         <div class="ol-ai-widget-error hidden" role="alert"></div>

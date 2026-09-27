@@ -7,6 +7,7 @@
 namespace johnhenry\orderlifecycle\jobs;
 
 use Craft;
+use craft\db\Query;
 use craft\queue\BaseJob;
 use johnhenry\orderlifecycle\OrderLifecycle;
 
@@ -21,7 +22,7 @@ use johnhenry\orderlifecycle\OrderLifecycle;
  * in between and change what "the previous snapshot" means). Only the DB
  * write itself, the part with no bearing on message accuracy, is deferred.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class LogOrderEventJob extends BaseJob
@@ -44,11 +45,20 @@ class LogOrderEventJob extends BaseJob
      *
      * @param mixed $queue The queue the job belongs to.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function execute($queue): void
     {
+        // An order deleted or purged before the job ran takes its timeline
+        // with it; writing the entry now would only fail on the order key.
+        $orderId = (int)($this->logData['orderId'] ?? 0);
+        $exists = (new Query())->from('{{%commerce_orders}}')->where(['id' => $orderId])->exists();
+
+        if (!$exists) {
+            return;
+        }
+
         OrderLifecycle::$plugin->getLogger()->insertLogRow($this->logData);
     }
 
@@ -60,7 +70,7 @@ class LogOrderEventJob extends BaseJob
      * @inheritdoc
      *
      * @return string|null The default queue job description.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string

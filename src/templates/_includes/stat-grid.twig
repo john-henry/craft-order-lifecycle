@@ -1,26 +1,12 @@
-{#
- # Shared stat-grid partial used by the dashboard overview page and the
- # Order Lifecycle Stats widget. Expects:
- #   stats            - the array returned by StatsService::getStats()
- #   showAllTimeNote  - bool, whether the period note distinguishes "all time"
- #   scopeInHeader    - bool, whether the order-count scope ("N orders") is
- #                      already shown by the surrounding chrome (the widget's
- #                      subtitle), so the Total Events card's caption stays
- #                      empty instead of repeating it. Defaults to false.
- #   showTopEvents    - bool, whether to show the "Top Events" list below the
- #                      stat grid. Defaults to true.
- #}
 {% import _self as macros %}
 {% set scopeInHeader = scopeInHeader ?? false %}
 {% set showTopEvents = showTopEvents ?? true %}
 
 {% macro trend(delta, upIsGood) %}{% if delta is not null %}{% set abs = delta|abs %}{% if abs < 1 %}<span class="ol-trend-chip ol-trend-neutral">→ &lt;1%</span>{% else %}{% set isGood = (delta > 0 and upIsGood) or (delta < 0 and not upIsGood) %}<span class="ol-trend-chip {{ isGood ? 'ol-trend-up' : 'ol-trend-down' }}">{{ delta > 0 ? '↑' : '↓' }} {{ abs }}%</span>{% endif %}{% endif %}{% endmacro %}
 
-{# Only highlight when a metric is genuinely notable - everything else stays neutral so these pop #}
 {% set conversionModifier = stats.conversionRate >= 50 ? 'good' : null %}
 {% set abandonmentModifier = stats.abandonmentRate >= 50 ? 'bad' : (stats.abandonmentRate >= 30 ? 'warning' : null) %}
 
-{# Narrative order: volume → conversion → timing → payment/customer → (optional) cart value/email #}
 {% set cards = [
     {
         label: 'Total Events'|t('order-lifecycle'),
@@ -146,9 +132,9 @@
         {{ 'Statistics for the last {days} days'|t('order-lifecycle', {days: stats.days}) }}
     {% endif %}
     {% if showAllTimeNote %}
-        &mdash; {{ 'includes carts currently in progress'|t('order-lifecycle') }}
+        · {{ 'includes carts currently in progress'|t('order-lifecycle') }}
         {% if stats.trends is not empty %}
-            &mdash; {{ 'trend vs prior {days} days'|t('order-lifecycle', {days: stats.days}) }}
+            · {{ 'trend vs prior {days} days'|t('order-lifecycle', {days: stats.days}) }}
         {% endif %}
     {% endif %}
 </div>

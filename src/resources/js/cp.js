@@ -76,11 +76,17 @@
     }
 
     function escapeAttr(str) {
-        return str
+        return String(str)
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+    }
+
+    // Escapes the text, then turns **bold** into <strong>: the model uses bold
+    // for emphasis even when asked for plain JSON strings.
+    function inlineMarkdown(str) {
+        return escapeAttr(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     }
 
     // mirrors AiInsightsService::decodeStructuredInsights() - null means
@@ -113,7 +119,7 @@
                     '<svg class="lifecycle-analysis-priority-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
                         '<path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm0-10.75a.75.75 0 0 1 .75.75v4a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75ZM8 11.5a.875.875 0 1 0 0-1.75.875.875 0 0 0 0 1.75Z" clip-rule="evenodd" />' +
                     '</svg>' +
-                    '<span><strong>' + Craft.t('order-lifecycle', 'Priority action') + ':</strong> ' + escapeAttr(data.priorityAction) + '</span>' +
+                    '<span><strong>' + Craft.t('order-lifecycle', 'Priority action') + ':</strong> ' + inlineMarkdown(data.priorityAction) + '</span>' +
                 '</div>'
             );
         }
@@ -129,10 +135,10 @@
                     '<span class="lifecycle-insight-badge lifecycle-insight-badge--' + type + '">' + type.toUpperCase() + '</span>' +
                     '<div class="lifecycle-analysis-item-body">' +
                         '<span class="lifecycle-analysis-item-title">' + escapeAttr(item.title || '') + '</span> ' +
-                        escapeAttr(item.description || '') +
+                        inlineMarkdown(item.description || '') +
                         (bullets.length
                             ? '<ul class="lifecycle-analysis-item-bullets">' +
-                                bullets.map((bullet) => '<li>' + escapeAttr(bullet) + '</li>').join('') +
+                                bullets.map((bullet) => '<li>' + inlineMarkdown(bullet) + '</li>').join('') +
                               '</ul>'
                             : '') +
                     '</div>' +
@@ -402,7 +408,7 @@
                         if (subtitleEl) subtitleEl.classList.add('hidden');
                         if (metaEl) {
                             metaEl.classList.remove('hidden');
-                            metaEl.textContent = Craft.t('order-lifecycle', 'Generated') + ' ' + new Date().toLocaleString();
+                            metaEl.textContent = Craft.t('order-lifecycle', 'Generated {date}', {date: new Date().toLocaleString()});
                         }
                         const summaryEl = resultEl.querySelector('.lifecycle-analysis-summary');
                         if (summaryEl && data.summary) {
@@ -443,10 +449,18 @@
             this.btn = element.querySelector('.ol-ai-widget-btn');
             this.spinner = element.querySelector('.ol-ai-widget-spinner');
             this.errorEl = element.querySelector('.ol-ai-widget-error');
+            this.statusEl = element.querySelector('.ol-ai-widget-status');
             this.defaultDays = parseInt(element.dataset.days || '30', 10);
 
             if (this.btn) {
                 this.btn.addEventListener('click', () => this.generate());
+            }
+        }
+
+        /** Updates the polite live region announced to screen readers. */
+        setStatus(message) {
+            if (this.statusEl) {
+                this.statusEl.textContent = message;
             }
         }
 
@@ -457,6 +471,7 @@
             this.btn.disabled = true;
             this.spinner.classList.remove('hidden');
             this.errorEl.classList.add('hidden');
+            this.setStatus(Craft.t('order-lifecycle', 'Generating insights…'));
 
             const days = parseInt(this.element.dataset.days || this.defaultDays, 10);
             const contextEl = this.element.querySelector('.ol-ai-context-notes');
@@ -470,18 +485,22 @@
                 const data = response.data;
 
                 if (!data.success) {
-                    this.errorEl.textContent = data.error || 'Failed to generate insights.';
+                    const message = data.error || Craft.t('order-lifecycle', 'Failed to get insights.');
+                    this.errorEl.textContent = message;
                     this.errorEl.classList.remove('hidden');
+                    this.setStatus(message);
                     return;
                 }
 
                 this.renderResult(data.insights, data.days);
+                this.setStatus(Craft.t('order-lifecycle', 'Insights generated.'));
             } catch (err) {
                 const msg = err.response && err.response.data && err.response.data.error
                     ? err.response.data.error
-                    : 'Request failed. Please try again.';
+                    : Craft.t('order-lifecycle', 'Request failed. Please try again.');
                 this.errorEl.textContent = msg;
                 this.errorEl.classList.remove('hidden');
+                this.setStatus(msg);
             } finally {
                 delete this.btn.dataset.loading;
                 this.btn.disabled = false;
@@ -506,7 +525,7 @@
             resultEl.innerHTML =
                 '<div class="ol-ai-widget-text ol-ai-markdown">' + parseMarkdown(insights) + '</div>' +
                 '<div class="ol-ai-widget-meta">' +
-                    Craft.t('order-lifecycle', 'Generated') + ' ' + new Date().toLocaleString() +
+                    Craft.t('order-lifecycle', 'Generated {date}', {date: new Date().toLocaleString()}) +
                     ' &middot; ' + periodLabel +
                     ' <button type="button" class="ol-ai-copy-btn btn small" data-copy="' + escapeAttr(insights) + '">' +
                         Craft.t('order-lifecycle', 'Copy') +

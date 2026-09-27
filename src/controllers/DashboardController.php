@@ -22,7 +22,7 @@ use yii\web\Response;
  * Renders the plugin's full-page CP screens: the stats overview, AI insights
  * and the CSV export form.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class DashboardController extends Controller
@@ -47,7 +47,7 @@ class DashboardController extends Controller
      * @throws Exception If the stats query fails.
      * @throws ForbiddenHttpException If the user lacks the required permission.
      * @throws InvalidConfigException If the stats service cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIndex(): Response
@@ -66,7 +66,7 @@ class DashboardController extends Controller
 
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
 
-        return $this->renderTemplate('order-lifecycle/dashboard/overview', [
+        return $this->renderTemplate('order-lifecycle/_dashboard/overview', [
             'stats' => $stats,
             'days' => $days,
         ]);
@@ -78,19 +78,19 @@ class DashboardController extends Controller
      * @return Response The rendered template response.
      * @throws ForbiddenHttpException If the user lacks the required permission.
      * @throws InvalidConfigException If saved insights cannot be loaded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionInsights(): Response
     {
-        $this->requirePermission('order-lifecycle:generateInsights');
+        $this->requirePermission(AiController::PERMISSION_GENERATE_INSIGHTS);
 
         $saved = OrderLifecycle::getInstance()->getAiInsights()->getSavedStoreInsights();
-        $hasApiKey = (bool)OrderLifecycle::$plugin->settings->getAnthropicApiKey();
+        $hasApiKey = (bool)OrderLifecycle::$plugin->getSettings()->getAnthropicApiKey();
 
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
 
-        return $this->renderTemplate('order-lifecycle/dashboard/insights', [
+        return $this->renderTemplate('order-lifecycle/_dashboard/insights', [
             'saved' => $saved,
             'hasApiKey' => $hasApiKey,
         ]);
@@ -102,18 +102,19 @@ class DashboardController extends Controller
      * @return Response The rendered template response.
      * @throws ForbiddenHttpException If the user lacks the required permission.
      * @throws InvalidConfigException If the asset bundle cannot be registered.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionExport(): Response
     {
-        $this->requirePermission('order-lifecycle:exportEvents');
+        $this->requirePermission(ExportController::PERMISSION_EXPORT_EVENTS);
+        $this->requirePermission('commerce-manageOrders');
 
         $eventTypes = EventType::cases();
 
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
 
-        return $this->renderTemplate('order-lifecycle/dashboard/export', [
+        return $this->renderTemplate('order-lifecycle/_dashboard/export', [
             'eventTypes' => $eventTypes,
         ]);
     }

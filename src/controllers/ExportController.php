@@ -7,10 +7,8 @@
 namespace johnhenry\orderlifecycle\controllers;
 
 use Craft;
-use craft\db\Query;
-use craft\helpers\DateTimeHelper;
-use craft\helpers\Db;
 use craft\web\Controller;
+use DateTimeImmutable;
 use Exception;
 use johnhenry\orderlifecycle\OrderLifecycle;
 use yii\base\InvalidConfigException;
@@ -24,11 +22,20 @@ use yii\web\Response;
  * Handles CSV export of lifecycle events for analysis in BI tools, spreadsheets
  * and data warehouses.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExportController extends Controller
 {
+    // =========================================================================
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * @var string The permission to export lifecycle events.
+     */
+    public const PERMISSION_EXPORT_EVENTS = 'order-lifecycle:export-events';
+
     // =========================================================================
     // Protected Properties
     // =========================================================================
@@ -45,85 +52,54 @@ class ExportController extends Controller
     /**
      * Exports the filtered lifecycle events as a downloadable CSV file.
      *
+     * The filters and the column selection arrive exactly as the form posted
+     * them; ExportService is what knows how to read them.
+     *
      * @return Response The CSV file download response.
      * @throws ForbiddenHttpException If the user lacks the required permission.
      * @throws Exception If the query or CSV generation fails.
      * @throws InvalidConfigException If a required component cannot be resolved.
      * @throws MethodNotAllowedHttpException If the request is not a POST request.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCsv(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('order-lifecycle:exportEvents');
+        $this->requirePermission(self::PERMISSION_EXPORT_EVENTS);
+        // The export carries every customer's email and address, so it needs
+        // the same access Commerce asks for to see those orders.
+        $this->requirePermission('commerce-manageOrders');
 
-        $request = Craft::$app->getRequest();
+        $request = $this->request;
+        $plugin = OrderLifecycle::getInstance();
 
-        $dateFrom = $request->getParam('dateFrom');
-        $dateTo = $request->getParam('dateTo');
-        $eventTypes = $request->getParam('eventTypes');
-        $orderId = $request->getParam('orderId');
-        $exportColumns = $request->getParam('exportColumns', []);
+        $criteria = [
+            'dateFrom' => $request->getBodyParam('dateFrom'),
+            'dateTo' => $request->getBodyParam('dateTo'),
+            'eventTypes' => $request->getBodyParam('eventTypes'),
+            'orderId' => $request->getBodyParam('orderId'),
+            'storeId' => $plugin->getStats()->resolveStoreId(),
+        ];
+        $columns = $request->getBodyParam('exportColumns', []);
 
-        $processedColumns = [];
-        foreach ($exportColumns as $columnKey => $columnData) {
-            if (isset($columnData['checked']) && $columnData['checked']) {
-                $order = isset($columnData['order']) ? (int)$columnData['order'] : 999;
-                $processedColumns[] = [
-                    'key' => $columnKey,
-                    'order' => $order,
-                ];
-            }
-        }
+        Craft::info(sprintf(
+            'Lifecycle events exported by user %s (store %s, order %s, types %s)',
+            Craft::$app->getUser()->getId() ?? '?',
+            $criteria['storeId'] ?? 'all',
+            $criteria['orderId'] ?: 'any',
+            is_array($criteria['eventTypes']) ? implode(',', array_filter($criteria['eventTypes'], 'is_scalar')) : 'all',
+        ), 'order-lifecycle');
 
-        usort($processedColumns, static function($a, $b) {
-            return $a['order'] <=> $b['order'];
-        });
+        $stream = $plugin->getExport()->exportCsvStream($criteria, is_array($columns) ? $columns : []);
 
-        $orderedColumnKeys = array_column($processedColumns, 'key');
+        $filename = 'lifecycle-events-' . (new DateTimeImmutable('now'))->format('Y-m-d-His') . '.csv';
 
-        $query = (new Query())
-            ->select([
-                'id',
-                'orderId',
-                'type',
-                'message',
-                'snapshot',
-                'dateCreated',
-            ])
-            ->from('{{%orderlifecycle_logs}}')
-            ->orderBy(['dateCreated' => SORT_ASC]);
+        // Exported cells carry customer-supplied text, so stop the browser
+        // second-guessing the declared type and rendering the file as HTML.
+        $this->response->getHeaders()->set('X-Content-Type-Options', 'nosniff');
 
-        if ($dateFrom) {
-            $dateFromObj = DateTimeHelper::toDateTime($dateFrom);
-            if ($dateFromObj) {
-                $query->andWhere(['>=', 'dateCreated', Db::prepareDateForDb($dateFromObj)]);
-            }
-        }
-
-        if ($dateTo) {
-            $dateToObj = DateTimeHelper::toDateTime($dateTo);
-            if ($dateToObj) {
-                $query->andWhere(['<=', 'dateCreated', Db::prepareDateForDb($dateToObj)]);
-            }
-        }
-
-        if (is_array($eventTypes) && !empty($eventTypes)) {
-            $query->andWhere(['in', 'type', $eventTypes]);
-        }
-
-        if ($orderId) {
-            $query->andWhere(['orderId' => (int)$orderId]);
-        }
-
-        $logs = $query->all();
-
-        $csv = OrderLifecycle::getInstance()->getExport()->generateCsv($logs, $orderedColumnKeys);
-
-        $filename = 'lifecycle-events-' . (new \DateTime())->format('Y-m-d-His') . '.csv';
-
-        return $this->response->sendContentAsFile($csv, $filename, [
+        return $this->response->sendStreamAsFile($stream, $filename, [
             'mimeType' => 'text/csv',
         ]);
     }

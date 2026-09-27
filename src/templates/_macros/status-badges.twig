@@ -1,11 +1,3 @@
-{# Status Badge Macro
-   Renders a status badge with consistent styling
-   
-   Parameters:
-   - label: The text to display in the badge
-   - type: The badge type (success/error/pending/custom/green/red/orange/failed)
-   - color: Optional custom color (required when type is 'custom')
-#}
 {% macro statusBadge(label, type, color = null) %}
    {% if type == 'success' %}
       {% set colorClass = 'green' %}

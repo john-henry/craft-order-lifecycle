@@ -1,98 +1,161 @@
 # Release Notes for Order Lifecycle
 
+## 2.0.0 - 2026-09-22 [CRITICAL]
+
+> [!IMPORTANT]
+> The plugin's permissions have new handles: `order-lifecycle:export-events` and
+> `order-lifecycle:generate-insights`. The update moves existing user and group grants across for you,
+> but any code of your own that checks the old handles needs changing.
+
+> [!NOTE]
+> Log times are now stored in UTC, and the update converts the existing ones from your system timezone.
+> Entries written by a control panel user with a timezone preference of their own can't be told apart
+> from the rest, so those few may sit out by that user's offset.
+
+### Added
+- A setting to switch order email logging on and off.
+- `order-lifecycle/logs/erase` deletes one customer's history, by `--email` or `--order`.
+- The settings page now flags any value set in `config/order-lifecycle.php`.
+- Export column rows can now be reordered with the keyboard, not just by dragging.
+
+### Changed
+- `craft.orderLifecycle` now only offers `logCheckoutStarted(order)`, `getPreviousOrderCount(order)` and `decodeStructuredInsights(message)`. Use `OrderLifecycle::getInstance()` from PHP for anything else.
+- New installs no longer record shoppers' IP addresses unless you turn it on. Existing installs keep what they had.
+- The Anthropic API key setting only takes an environment variable, like `$ANTHROPIC_API_KEY`.
+- Exporting needs Commerce's "Manage orders" permission as well, and only exports the store you're looking at. Each export is written to the log.
+- The dashboard, widgets and AI insights follow the control panel's site switcher on multi-store installs.
+- The dashboard widgets are only offered to people who can see orders.
+- AI prompts describe what happened to an order without the customer's name, email or address.
+- Auto-prune runs on the queue now, in batches.
+- A cart stops recording events once it has 500.
+- AI insight requests are capped at 20 a minute per person.
+- Only an order's 250 most recent events are sent to Claude.
+- The package is about half the size.
+
+### Fixed
+- Event times showed an hour or more out on sites not set to UTC.
+- Trashing an order wiped its timeline.
+- A refund the gateway declined was logged as refunded.
+- Payment Authorized events now record the amount authorised.
+- Failed order emails now show the email's name.
+- A coupon, address or customer change made in the same save as a line item change could go unrecorded.
+- Bulk resaves no longer add events to every order.
+- A logging failure could roll back the order save it was part of.
+- Generating insights now checks you can see the order.
+- Bold text in a structured order analysis showed its asterisks instead of being bold.
+- The timeline now uses the order's own store's statuses.
+- The order edit screen loads faster on long timelines.
+- A failing dashboard widget could stop the whole dashboard loading.
+- Exporting a large log could run out of memory.
+- Picking event types on the Export page that matched nothing exported every event.
+- Exported dates are in the site's timezone, and the message column has no HTML in it.
+- Stats load faster on large logs.
+- Store insights no longer count declined refunds.
+- Saving settings in the control panel copied values from `config/order-lifecycle.php` into project config.
+- An Anthropic API key from an environment variable is now trimmed.
+- The purge commands now say so when there's nothing to delete, and `logs/purge` refuses `--days` below 1.
+- The field no longer offers a Required toggle or translation options, and stays out of GraphQL.
+- Strings in the control panel's JavaScript and templates can now be translated.
+- The settings model now fires Craft's `defineRules` event.
+- The example config file now lists `asyncLogging`.
+- Screen readers now announce when AI insights are generating, and when they finish or fail.
+- A successful payment now shows a status label, not just an icon colour.
+- Decorative icons in the event timeline and dashboard alerts are no longer read aloud by screen readers.
+- Currency symbols and other non-English characters, and slashes in links, now show as written in the timeline's change table and snapshots, rather than as codes like `\u20ac`.
+
+### Security
+- `craft.orderLifecycle` handed any template, front end included, the full logger and services, so a template could read or delete any order's history.
+- Event messages and saved AI insights are sanitised before they're shown.
+- The plugin's control panel pages could be loaded by URL without their permission checks.
+- The exported CSV tells browsers not to treat it as a web page.
+
 ## 1.0.5 - 2026-07-09
 
 ### Fixed
-- Phantom timeline events are no longer logged when nothing really changed. On the shipping step, Commerce quietly toggles empty values between "nothing" and "empty" as it recalculates, both on the order's shipping method and on untouched address fields, and the timeline was treating that back-and-forth as a real change: you'd see a "Shipping Method Set" with no method and nothing to show. It now only logs when a shipping method or address genuinely changes.
+- Shipping Method Set and address events were logged when nothing had really changed.
 
 ## 1.0.4 - 2026-07-08
 
 ### Fixed
-- Order events that get logged in the background no longer fail on the queue. Anything logged from a queue job, like the events tied to your order emails, was falling over with an error and never being recorded, because the plugin was trying to read the shopper's IP address in a place where there's no browser request to read it from. It now records no IP in that situation and logs the event as normal.
-- A normal Stripe checkout is no longer recorded as a failed payment. When Stripe first sets up a payment it reports back a starting state that every checkout goes through, and the plugin was mistaking that for a failed attempt, so the AI insights would count a perfectly good order as having a failed payment. It now only counts a payment as failed when the gateway actually says it failed.
-- A problem while logging an order event can no longer knock the order itself off course. A lot of this logging runs right inside Commerce's own work: when a payment, capture or refund goes through, when an order is marked paid or completed, or when an order email is sent. If writing a log entry ever failed in the middle of that, Commerce could treat a payment that had already gone through as failed and send the shopper back to pay again, or resend an email. Every bit of order logging is now kept to itself and written to the error log, well away from the payment, the order and the email.
+- Events logged from a queue job, such as order email events, failed and were never recorded.
+- A normal Stripe checkout was recorded as a failed payment.
+- A failure while logging could make Commerce treat a successful payment as failed, or resend an order email.
 
 ## 1.0.3 - 2026-07-06
 
 ### Changed
-- Empty carts a shopper opened but never put an item into are no longer counted in the Conversion or Abandonment stats. Both now measure real, item-bearing carts, so an empty session cart no longer drags the conversion rate down or gets treated as abandoned.
-- Store-wide AI insights now generate right there on the page, the same way the per-order insights do, instead of running on the Craft queue. They no longer need a queue worker to be running, so they generate reliably and appear as soon as Claude responds.
-- Tidied up the AI Insights page and the dashboard widget: dropped the extra border that boxed the report inside another box, and added a short intro line to the AI Insights page explaining what it does.
+- Empty carts are no longer counted in the Conversion and Abandonment stats.
+- Store-wide AI insights now generate straight away on the page, with no queue worker needed.
+- The AI Insights page and widget have a tidier layout, and the page has a short intro.
 
 ### Fixed
-- Generated store-wide AI insights now stay put after a page reload and show on the dashboard widget as well. They were being saved under one cache key but read back under another, so they'd vanish on reload and never turn up on the widget.
-- Copying AI insights now copies the readable text instead of the raw Markdown (asterisks, hashes and dashes).
+- Store-wide AI insights disappeared on reload and never showed on the dashboard widget.
+- Copying AI insights copied the raw Markdown instead of the readable text.
 
 ## 1.0.2 - 2026-07-06
 
 ### Fixed
-- The Abandonment stat could show a rate well over 100% (and far more abandoned carts than carts created), because it counted every idle incomplete cart in Commerce, including empty per-visitor session carts and carts created before the plugin was installed. It now only counts carts the plugin tracked as created, so it stays in step with the Conversion stat.
-- The Order Lifecycle control panel menu now shows for a non-admin user once their group is given the built-in "Access Order Lifecycle" permission. The Overview page is gated by that permission instead of a separate "Access dashboard" one, which on its own never revealed the menu (grant "Access Order Lifecycle" to any group that had "Access dashboard" before).
-- Shipping method names in the timeline are now read through Commerce's shipping-method interface, so a custom shipping-method plugin that doesn't expose its name as a plain property no longer shows up blank.
+- The Abandonment stat could show a rate over 100%.
+- The Order Lifecycle menu didn't show for non-admins with the "Access Order Lifecycle" permission. If a group had "Access dashboard" before, give it "Access Order Lifecycle" instead.
+- Shipping methods from some third-party plugins showed with a blank name on the timeline.
 
 ## 1.0.1 - 2026-07-06
 
 ### Changed
-- The full AI Insights page now uses the same dashed-border card and plain Generate Insights button as the AI Insights dashboard widget, instead of a white panel with a purple button.
+- The AI Insights page now matches the dashboard widget's card and button.
 
 ### Fixed
-- The Cart Value stat on the Order Lifecycle Stats widget now always shows the store's own currency, instead of sometimes showing another currency depending on the browsing user's locale.
-- The Abandonment stat on the Order Lifecycle Stats widget could show a wildly inflated rate compared to the Conversion stat - both now agree with each other.
-- A cart now only counts as abandoned once it's had no activity for an hour, instead of any incomplete cart counting as abandoned regardless of how recently it was last touched.
-- AI-generated store insights now correctly reflect the individual store they were requested for, instead of AI Insights sometimes mixing up store data or showing one store's insights for another on multi-store installs.
-- The Order Lifecycle Stats widget could briefly show one store's numbers on another store's dashboard right after switching stores.
-- The Order Lifecycle Stats widget and dashboard now scope every stat to the current store, instead of mixing in other stores' totals, event counts and cart values on multi-store installs.
+- The Cart Value stat sometimes showed the wrong currency.
+- The Abandonment and Conversion stats didn't agree with each other.
+- A cart counted as abandoned straight away instead of after an hour with no activity.
+- On multi-store installs, stats, AI insights and the stats widget could mix in or show another store's figures.
 
 ## 1.0.0 - 2026-07-05
 
-### Security
-- Fixed a stored XSS vulnerability where customer-supplied order data (addresses, coupon codes, SKUs) could end up rendered as unescaped HTML in the event log.
-- Hardened the plugin settings save process against unauthorized or unintended changes.
-- Added safeguards against AI prompt injection via customer-supplied order data.
-- Fixed a CSV injection vulnerability in event exports - a coupon code, SKU, or other order data starting with `=`, `+`, `-`, or `@` could be interpreted as a formula by Excel or Google Sheets when the export was opened.
-- CSV exports now require a POST request, closing off accidental large exports triggered by a crawled or bookmarked link.
-
 ### Added
-- AI-generated store insights now run in the background instead of holding up the page, and can be generated on demand with a Period selector and a Context/Notes field right there in the AI Insights widget - no need to visit a separate settings screen.
-- A new Performance guide, with recommended settings for high-traffic checkouts.
-- A new Field Type guide, covering where the Order Lifecycle field goes, what it shows, and its empty/error states, in one place.
-- A new "Per-Order Insights Style" setting lets you choose how the order's AI analysis is presented: a structured view with a priority-action callout and labeled Action / Info / Good insight cards, or a plain narrative summary.
-- The order's Lifecycle timeline can now be filtered by event category (Cart, Line Items, Coupons, Customer, Address, Shipping, Payments, Order, Emails) and sorted oldest-first or newest-first.
-- Each timeline event now shows exactly what changed on the order since the previous event, with a "View full snapshot" link alongside it for the full raw detail underneath.
-- The Order Lifecycle Stats widget's "Top Events" list can now be turned off in the widget's settings, for stores that just want the stat grid.
+- Store-wide AI insights can be generated from the widget, with a period picker and a notes field.
+- A Performance guide with recommended settings for busy stores.
+- A Field Type guide.
+- A "Per-Order Insights Style" setting: a structured view with action cards, or a plain summary.
+- The timeline can be filtered by event category and sorted oldest or newest first.
+- Each timeline event shows what changed since the previous one, with the full snapshot a click away.
+- The stats widget's Top Events list can be switched off.
 
 ### Changed
-- First stable release. The plugin is out of beta and ready to run in production.
-- Cut down database storage per logged event by dropping data that was never actually surfaced anywhere in the plugin.
-- Improved keyboard navigation, screen reader support, and colour contrast throughout the control panel.
-- The "Top Events" list now shows readable event names (e.g. "Billing Address Set") instead of raw internal codes.
-- The AI Insights dashboard widget and page now share the same layout and controls, and the widget's separate settings screen is gone, since its one setting now lives directly on the widget.
-- Store-wide AI insight generation now has more headroom before Craft's queue considers it stuck, and a failed run now shows up as a retryable failure in the Queue Manager instead of disappearing silently.
-- The Lifecycle field's summary cards (Time to Convert, Checkout Duration, Cart Items, Customer) and the Started/Completed bar have a cleaner card layout.
-- Timeline events now show the time elapsed since the previous event, and only show the date when the timeline spans more than one day - every event still shows its own time.
-- Generating an order's AI analysis now shows a loading indicator with a short preview of what's coming, instead of just a disabled button.
-- "Order Completed" and "Order Paid" now use distinct icons in the timeline so the two milestones are easier to tell apart at a glance.
-- Status badges on timeline events (Payment Processed, Order Paid, Order Completed, Email Sent, Email Failed) no longer repeat what the event title already says - a badge now only appears when it adds real information, such as a failure or a specific status.
-- The Order Lifecycle Stats dashboard widget has a cleaner, single-surface layout, with stats grouped by what they measure (volume, conversion, timing) instead of a loose grid, and the order count moved into the widget's own title bar.
-- Line item change messages now show the product and variant name instead of the raw SKU.
-- Address change messages no longer repeat "Shipping/Billing address set" - just the address itself, since the event title already says what happened.
-- The AI Insights dashboard widget now uses the same card styling as the per-order "Order analysis" panel - a dashed border until insights exist, a plain "Generate Insights" button instead of a purple one - and its description now shows as the widget's subtitle instead of repeating inside the card.
+- First stable release.
+- Each logged event takes up less room in the database.
+- Better keyboard navigation, screen reader support and colour contrast in the control panel.
+- Top Events shows readable event names.
+- The AI Insights widget and page share one layout, and the widget no longer has a settings screen.
+- The dashboard stats widget has a cleaner layout, with the order count in its title bar.
+- Timeline events show the time since the previous event, and the date only when the timeline spans more than one day.
+- Generating an order's analysis shows a loading state.
+- Order Completed and Order Paid have their own icons.
+- Status badges only show on timeline events when they add something the title doesn't.
+- Line item messages show the product name instead of the SKU.
+- Address messages no longer repeat the event title.
+- The AI Insights widget uses the same card style as the order analysis panel.
 
 ### Fixed
-- Shipping and billing country changes are now correctly recorded in the event log.
-- Fixed the AI Insights widget: results weren't loading after generation, saved insights showed up as raw text instead of formatted output, the button had lost its icon and label, and the spacing was off.
-- Fixed the "Auto-Prune Logs" setting not saving.
-- Improved CSV export performance on large date ranges.
-- Fixed several minor display and settings-saving bugs.
-- Fixed a bug where a Commerce order confirmation email could be sent to the customer more than once for the same order under load.
-- Timeline messages for coupon, address, customer, shipping-method, and line-item changes are now always generated from the correct prior state, even when Async Queue Logging is enabled and several events land for the same order in quick succession.
-- Fixed "Billing Address Set" and "Shipping Address Set" showing no changes when both addresses were saved together - each event now always shows its own correct field-by-field changes.
-- Fixed the sent email's name always showing blank in the event log.
-- Fixed "Cart Created", "Checkout Started", "Coupon Applied", "Coupon Removed", and "Order Completed" events not showing any description of what actually happened.
-- "Payment Refunded" events now show the amount refunded and the gateway it went through, instead of just the raw gateway/transaction-status field changes.
-- "Payment Refunded" events now show "Amount Refunded" and, if one was entered, the refund note in the changes table - the gateway and transaction status shown there previously belonged to the original charge, not the refund, and repeated the gateway already named in the event's message.
-- Fields that were never set no longer show up as a change from `null` to an empty value (e.g. "Shipping Method: null → ''") in an event's changes table - only changes with a real value on at least one side are shown.
+- Country changes on shipping and billing addresses weren't recorded.
+- AI Insights widget results didn't load after generating, showed as raw text, and the button lost its label.
+- The Auto-Prune Logs setting didn't save.
+- Slow CSV exports over large date ranges.
+- An order confirmation email could be sent more than once under load.
+- Change messages could describe the wrong prior state when async logging was on.
+- Billing and Shipping Address Set showed no changes when both were saved together.
+- Sent emails showed no name in the log.
+- Cart Created, Checkout Started, Coupon Applied, Coupon Removed and Order Completed events had no description.
+- Payment Refunded events now show the amount, gateway and refund note.
+- Fields that were never set no longer show as a change from `null` to empty.
+- Several smaller display and settings-saving bugs.
 
+### Security
+- Customer-entered order data could be shown as unescaped HTML in the event log.
+- Saving plugin settings is better protected against unauthorised changes.
+- AI prompts are protected against instructions hidden in customer-entered order data.
+- Exported values starting with `=`, `+`, `-` or `@` could run as formulas in Excel or Google Sheets.
+- CSV exports need a POST request, so a crawled or bookmarked link can't start one.
 
 ## 1.0.0-beta.1 - 2026-06-05
 

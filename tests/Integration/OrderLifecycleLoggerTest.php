@@ -230,3 +230,43 @@ describe('OrderLifecycleLogger::updateLog()', function () {
         expect($unchanged['message'])->toBe('Second');
     });
 });
+
+// ---------------------------------------------------------------------------
+// getTimelineForOrder() with pre-fetched logs
+// ---------------------------------------------------------------------------
+// Every log row carries its snapshot, so the order edit screen reading the logs
+// and then the timeline pulls the whole lot twice. Passing what it already has
+// must give the same answer as letting the method fetch for itself.
+
+describe('OrderLifecycleLogger::getTimelineForOrder() with supplied logs', function() {
+    it('matches the timeline it builds from its own query', function() {
+        $order = makeOrder();
+        $logger = OrderLifecycle::$plugin->getLogger();
+
+        $logger->log($order, EventType::CART_CREATED);
+        $logger->log($order, EventType::CHECKOUT_STARTED);
+        $logger->log($order, EventType::AI_INSIGHTS, [], 'some insight');
+        $logger->log($order, EventType::ORDER_COMPLETED);
+
+        $orderId = (int)$order->id;
+        $logs = $logger->getLogsForOrder($orderId);
+
+        expect($logger->getTimelineForOrder($orderId, $logs))
+            ->toEqual($logger->getTimelineForOrder($orderId));
+    });
+
+    it('drops the AI insight entries either way', function() {
+        $order = makeOrder();
+        $logger = OrderLifecycle::$plugin->getLogger();
+
+        $logger->log($order, EventType::CART_CREATED);
+        $logger->log($order, EventType::AI_INSIGHTS, [], 'some insight');
+
+        $orderId = (int)$order->id;
+        $timeline = $logger->getTimelineForOrder($orderId, $logger->getLogsForOrder($orderId));
+
+        expect(array_column($timeline, 'type'))
+            ->not->toContain(EventType::AI_INSIGHTS->value)
+            ->and($timeline)->toHaveCount(1);
+    });
+});

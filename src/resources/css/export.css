@@ -1,5 +1,3 @@
-
-/* Event types list container */
 #event-types-list {
     max-height: 400px;
     overflow-y: auto;
@@ -10,7 +8,6 @@
     margin-top:10px;
 }
 
-/* Select all events link */
 #select-all-events {
     cursor: pointer;
     color:var(--link-color);
@@ -23,19 +20,16 @@
     text-decoration: underline;
 }
 
-/* Event checkbox container */
 #event-types-list > div {
     margin-bottom: 8px;
 }
 
-/* Event checkbox label */
 #event-types-list label {
     display: flex;
     align-items: center;
     cursor: pointer;
 }
 
-/* Event checkbox input */
 .event-checkbox {
     margin-right: 8px;
 }
@@ -45,7 +39,6 @@
     margin-top: 7px;
 }
 
-/* Active preset button */
 .date-preset-btn.active {
     background-color: var(--ui-control-active-color, #0d78f2);
     color: #fff;

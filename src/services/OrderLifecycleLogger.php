@@ -6,12 +6,16 @@
 
 namespace johnhenry\orderlifecycle\services;
 
+use Carbon\Carbon;
 use Craft;
 use craft\commerce\elements\Order;
 use craft\commerce\Plugin as Commerce;
+use craft\commerce\records\Transaction as TransactionRecord;
 use craft\db\Query;
 use craft\helpers\Json;
+use craft\helpers\StringHelper;
 use DateTimeImmutable;
+use DateTimeZone;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\helpers\Formatter;
 use johnhenry\orderlifecycle\jobs\LogOrderEventDeferredJob;
@@ -22,7 +26,6 @@ use yii\base\Component;
 use yii\base\InvalidArgumentException;
 use yii\base\InvalidConfigException;
 use yii\db\Exception;
-use yii\db\Expression;
 
 /**
  * Order Lifecycle logger service.
@@ -31,14 +34,40 @@ use yii\db\Expression;
  * generating change descriptions and persisting log entries either inline or
  * via the queue.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class OrderLifecycleLogger extends Component
 {
     // =========================================================================
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * @var int The most events recorded for one cart before it is completed.
+     * Every cart save can add several rows, each with a full snapshot, and a
+     * cart can be saved by anyone visiting the shop.
+     */
+    public const MAX_CART_EVENTS = 500;
+
+    /**
+     * @var int How many entries one pruning pass deletes.
+     */
+    public const PRUNE_BATCH_SIZE = 5000;
+
+    // =========================================================================
     // Private Properties
     // =========================================================================
+
+    /**
+     * Snapshot each order had when a save of it began, keyed by order ID.
+     * Changes detected after the save are compared against this rather than
+     * the latest snapshot, which events fired part way through the save have
+     * already moved on.
+     *
+     * @var array<int, array|null>
+     */
+    private array $_preSave = [];
 
     /**
      * Per-request snapshot cache keyed by order ID.
@@ -58,20 +87,24 @@ class OrderLifecycleLogger extends Component
     /**
      * Clear the in-request snapshot cache.
      *
-     * Pass an order ID to clear a single entry, or null to clear all entries.
-     * Used in tests to simulate a fresh logger without re-registering event handlers.
+     * Pass an order ID to clear that order from both the in-request memo and
+     * the persistent cache. Passing null clears the memo only: a cache backend
+     * cannot be enumerated by key prefix, so there is nothing to sweep the
+     * persistent entries with. Used in tests to simulate a fresh logger without
+     * re-registering event handlers.
      *
-     * @param int|null $orderId The order ID to clear, or null to clear all entries.
+     * @param int|null $orderId The order ID to clear, or null for the in-request memo alone.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function clearSnapshotCache(?int $orderId = null): void
     {
         if ($orderId === null) {
             $this->_snapshotCache = [];
+            $this->_preSave = [];
         } else {
-            unset($this->_snapshotCache[$orderId]);
+            unset($this->_snapshotCache[$orderId], $this->_preSave[$orderId]);
             Craft::$app->getCache()->delete("ol_snapshot_{$orderId}");
         }
     }
@@ -99,7 +132,7 @@ class OrderLifecycleLogger extends Component
      * @param array $payload Additional data to include in the snapshot.
      * @param string|null $message Optional custom message (auto-generated if null).
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function logDeferred(int $orderId, EventType $type, array $payload = [], ?string $message = null): void
@@ -132,14 +165,61 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If the log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function log(Order $order, EventType $type, array $payload = [], ?string $message = null): void
     {
-        $logData = $this->_prepareLogData($order, $type, $payload, $message);
+        $this->_log($order, $type, $payload, $message);
+    }
 
-        if (OrderLifecycle::$plugin->settings->asyncLogging) {
+    /**
+     * Notes the snapshot an order has as a save of it begins.
+     *
+     * Commerce fires the line-item and status events from inside the save, and
+     * logging those moves the order's latest snapshot on to the saved state.
+     * The changes detected once the save ends are compared against the state
+     * noted here instead, so a coupon or address changed in the same save is
+     * still seen. A nested save keeps the note taken by the save around it.
+     *
+     * @param Order $order The order about to be saved.
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function beginOrderSave(Order $order): void
+    {
+        if (!$order->id) {
+            return;
+        }
+
+        $orderId = (int)$order->id;
+
+        if (!array_key_exists($orderId, $this->_preSave)) {
+            $this->_preSave[$orderId] = $this->getLastSnapshot($orderId);
+        }
+    }
+
+    /**
+     * Logs an order lifecycle event, comparing against a given snapshot.
+     *
+     * @param Order $order The order to log the event for.
+     * @param EventType $type The type of lifecycle event.
+     * @param array $payload Additional data to include in the snapshot.
+     * @param string|null $message Optional custom message (auto-generated if null).
+     * @param array|null $previous The snapshot to describe the change against, or null for the latest.
+     * @return void
+     * @throws Exception If the log row cannot be inserted.
+     * @throws \yii\base\Exception If a random UID cannot be generated.
+     * @throws InvalidConfigException If a required component cannot be resolved.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    private function _log(Order $order, EventType $type, array $payload = [], ?string $message = null, ?array $previous = null): void
+    {
+        $logData = $this->_prepareLogData($order, $type, $payload, $message, $previous);
+
+        if (OrderLifecycle::$plugin->getSettings()->asyncLogging) {
             Craft::$app->getQueue()->push(new LogOrderEventJob(['logData' => $logData]));
             return;
         }
@@ -163,7 +243,7 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If the log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function writeLogNow(Order $order, EventType $type, array $payload = [], ?string $message = null): void
@@ -181,76 +261,53 @@ class OrderLifecycleLogger extends Component
      * @param array $logData The prepared log row (see _prepareLogData()).
      * @return void
      * @throws Exception If the log row cannot be inserted.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function insertLogRow(array $logData): void
     {
-        Craft::$app->getDb()->createCommand()
-            ->insert('{{%orderlifecycle_logs}}', $logData)
-            ->execute();
+        $db = Craft::$app->getDb();
+
+        if ($db->getTransaction() === null) {
+            $db->createCommand()->insert('{{%orderlifecycle_logs}}', $logData)->execute();
+
+            return;
+        }
+
+        // Inside the order's own save, so the insert runs in a savepoint: a
+        // failed insert rolls back only itself, where on PostgreSQL it would
+        // otherwise abort the whole transaction and fail the order save that
+        // follows. A deadlock is different: the database has already rolled
+        // the whole transaction back, so it is thrown on for the save to fail
+        // as it truly has.
+        $transaction = $db->beginTransaction();
+
+        try {
+            $db->createCommand()->insert('{{%orderlifecycle_logs}}', $logData)->execute();
+            $transaction->commit();
+        } catch (Throwable $e) {
+            if (!self::isDeadlock($e)) {
+                $transaction->rollBack();
+            }
+
+            throw $e;
+        }
     }
 
     /**
-     * Builds an order snapshot, generates a change-description message and
-     * assembles the log row ready for insertion, updating the snapshot
-     * caches along the way.
+     * Whether a database error is a deadlock or serialisation failure, after
+     * which the database has already rolled the whole transaction back.
      *
-     * Always synchronous: message generation needs to diff against the
-     * actual previous snapshot at the moment of the event, not whatever
-     * happens to be the "last" snapshot whenever a deferred job eventually
-     * runs.
-     *
-     * @param Order $order The order to log the event for.
-     * @param EventType $type The type of lifecycle event.
-     * @param array $payload Additional data to include in the snapshot.
-     * @param string|null $message Optional custom message (auto-generated if null).
-     * @return array The prepared log row, ready to pass to insertLogRow().
-     * @throws \yii\base\Exception If a random UID cannot be generated.
-     * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
-     * @since 1.0.0
+     * @param Throwable $e The error.
+     * @return bool
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
      */
-    private function _prepareLogData(Order $order, EventType $type, array $payload, ?string $message): array
+    public static function isDeadlock(Throwable $e): bool
     {
-        $settings = OrderLifecycle::$plugin->settings;
-        $orderId = (int)$order->id;
+        $info = $e instanceof Exception ? $e->errorInfo : [];
 
-        // grab this before we touch the cache below, or we'd diff against ourselves
-        $previousSnapshot = $this->getLastSnapshot($orderId);
-
-        $currentSnapshot = $this->_buildSnapshot($order, $payload);
-
-        if ($message === null && $previousSnapshot !== null) {
-            $message = $this->generateChangeDescription($previousSnapshot, $currentSnapshot, $type);
-        }
-
-        // microsecond precision so same-second events keep their insert order
-        $now = (new DateTimeImmutable('now'))->format('Y-m-d H:i:s.u');
-
-        // getUserIP() only exists on the web request; when this runs on the
-        // queue (LogOrderEventDeferredJob, or any listener firing inside another
-        // queue job) the request is a console request with no client IP to
-        // capture, so record null rather than calling a method that isn't there.
-        $request = Craft::$app->getRequest();
-
-        $logData = [
-            'orderId' => $orderId,
-            'storeId' => $order->storeId,
-            'type' => $type->value,
-            'message' => $message,
-            'snapshot' => Json::encode($currentSnapshot),
-            'userId' => $settings->collectUserId ? Craft::$app->getUser()->getId() : null,
-            'ip' => $settings->collectUserIp && !$request->getIsConsoleRequest() ? $request->getUserIP() : null,
-            'dateCreated' => $now,
-            'dateUpdated' => $now,
-            'uid' => Craft::$app->getSecurity()->generateRandomString(),
-        ];
-
-        $this->_snapshotCache[$orderId] = $currentSnapshot;
-        Craft::$app->getCache()->set("ol_snapshot_{$orderId}", $currentSnapshot, 7200);
-
-        return $logData;
+        return in_array($info[0] ?? null, ['40001', '40P01'], true) || ($info[1] ?? null) === 1213;
     }
 
     /**
@@ -260,46 +317,97 @@ class OrderLifecycleLogger extends Component
      *
      * @param int $orderId The order ID to fetch logs for.
      * @return array Array of log records.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getLogsForOrder(int $orderId): array
     {
-        $q = (new Query())
+        $rows = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['orderId' => $orderId])
-            ->orderBy(['dateCreated' => SORT_DESC]);
+            ->orderBy(['dateCreated' => SORT_DESC, 'id' => SORT_DESC])
+            ->all();
 
+        return array_map(static function(array $row) {
+            $row['date'] = self::rowDate($row['dateCreated']);
 
-        return $q->all();
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * Turns a stored log time into a date in Craft's timezone.
+     *
+     * Log times are stored as UTC with no zone attached, like every other
+     * date Craft writes, so they are read as UTC here. Handing Twig the
+     * stored string instead would read it in the viewer's own timezone.
+     *
+     * @param string $value A dateCreated or dateUpdated value as stored.
+     * @return Carbon The same moment in Craft's timezone.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public static function rowDate(string $value): Carbon
+    {
+        return Carbon::parse($value, 'UTC')->setTimezone(Craft::$app->getTimeZone());
+    }
+
+    /**
+     * The current time in the form log rows are stored in: UTC, with
+     * microseconds so events in the same second keep their order.
+     *
+     * @return string
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public static function now(): string
+    {
+        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
     }
 
     /**
      * Returns the timeline entries for an order: lifecycle logs (excluding
      * AI insights) enriched with their filter pill, the number of seconds
-     * elapsed since the previous chronological event, and which top-level
-     * order snapshot fields changed since that previous event.
+     * elapsed since the previous chronological event, which top-level order
+     * snapshot fields changed since that previous event, the decoded snapshot
+     * itself and the id of the transaction its payload names, if any.
      *
      * Entries are newest-first, matching {@see getLogsForOrder()}. The oldest
      * entry has no previous event to compare against, so its `deltaSeconds`
      * and `orderChanges` are null/empty.
      *
+     * Each row gains:
+     *
+     * - `pill` - the filter pill the event shows under
+     * - `deltaSeconds` - seconds since the previous event, null for the oldest
+     * - `orderChanges` - the field-by-field diff against the previous event
+     * - `snapshotData` - the decoded snapshot, null where it is absent or malformed
+     * - `transactionId` - the transaction the payload names, null where it names none
+     *
      * @param int $orderId The order ID to build the timeline for.
+     * @param array|null $logs The order's log rows, newest-first, where the
+     *                         caller already has them. Every row carries its
+     *                         snapshot, so a caller that shows both the raw
+     *                         logs and the timeline would otherwise read the
+     *                         whole lot twice for the one page.
      * @return array The enriched, newest-first timeline entries.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function getTimelineForOrder(int $orderId): array
+    public function getTimelineForOrder(int $orderId, ?array $logs = null): array
     {
         $logs = array_values(array_filter(
-            $this->getLogsForOrder($orderId),
+            $logs ?? $this->getLogsForOrder($orderId),
             static fn(array $log) => $log['type'] !== EventType::AI_INSIGHTS->value
         ));
 
-        // decode once up front - everything but the oldest entry gets diffed
-        // against its neighbour, so decoding lazily would do it twice
-        $orderSnapshots = array_map(
-            fn(array $log) => $this->_decodeOrderSnapshot($log['snapshot'] ?? null),
+        // Decoded once per row and carried on the row itself. Everything but
+        // the oldest entry gets diffed against its neighbour, so decoding
+        // lazily would do it twice here; and the order edit screen reaches into
+        // the same snapshot half a dozen times per event to draw one card,
+        // which was six more parses of the same JSON apiece.
+        $snapshots = array_map(
+            fn(array $log) => $this->_decodeSnapshot($log['snapshot'] ?? null),
             $logs
         );
 
@@ -315,16 +423,21 @@ class OrderLifecycleLogger extends Component
         foreach ($logs as $index => $log) {
             $previous = $logs[$index + 1] ?? null;
 
+            $snapshot = $snapshots[$index];
+            $payload = is_array($snapshot['payload'] ?? null) ? $snapshot['payload'] : null;
+
+            $log['snapshotData'] = $snapshot;
+            $log['transactionId'] = isset($payload['transactionId']) ? (int)$payload['transactionId'] : null;
             $log['pill'] = EventType::tryFrom($log['type'])?->getFilterPill() ?? 'other';
+            $log['label'] = EventType::tryFrom($log['type'])?->getLabel() ?? $log['type'];
             $log['deltaSeconds'] = $previous !== null
-                ? max(0, strtotime($log['dateCreated']) - strtotime($previous['dateCreated']))
+                ? max(0, self::rowDate($log['dateCreated'])->getTimestamp() - self::rowDate($previous['dateCreated'])->getTimestamp())
                 : null;
 
             if (in_array(EventType::tryFrom($log['type']), $addressEventTypes, true)) {
                 // address events carry their own before/after in the payload -
                 // more reliable than the order-snapshot diff, which goes blank
                 // when billing and shipping are both saved in the same request
-                $payload = $this->_decodeSnapshotPayload($log['snapshot'] ?? null);
                 $after = $payload['after'] ?? null;
                 $before = $payload['before'] ?? null;
 
@@ -348,7 +461,10 @@ class OrderLifecycleLogger extends Component
             } else {
                 // oldest entry has nothing to diff against, so every field
                 // shows as "null -> value" - the order's initial state
-                $log['orderChanges'] = $this->_diffOrderSnapshot($orderSnapshots[$index], $orderSnapshots[$index + 1] ?? null);
+                $log['orderChanges'] = $this->_diffOrderSnapshot(
+                    self::_orderSection($snapshot),
+                    self::_orderSection($snapshots[$index + 1] ?? null),
+                );
             }
 
             $timeline[] = $log;
@@ -365,7 +481,7 @@ class OrderLifecycleLogger extends Component
      *
      * @param int $orderId The order ID to fetch the snapshot for.
      * @return array|null The decoded snapshot array, or null if not found.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getLastSnapshot(int $orderId): ?array
@@ -386,7 +502,8 @@ class OrderLifecycleLogger extends Component
         $row = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['orderId' => $orderId])
-            ->orderBy(['dateCreated' => SORT_DESC])
+            ->andWhere(['not', ['type' => EventType::AI_INSIGHTS->value]])
+            ->orderBy(['dateCreated' => SORT_DESC, 'id' => SORT_DESC])
             ->limit(1)
             ->one();
         if (!$row || empty($row['snapshot'])) {
@@ -410,7 +527,7 @@ class OrderLifecycleLogger extends Component
      * @param EventType $type The event type to determine which changes to check.
      * @return string|null A description of changes, or null if no relevant changes.
      * @throws InvalidConfigException If a formatter dependency cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function generateChangeDescription(array $previous, array $current, EventType $type): ?string
@@ -469,6 +586,20 @@ class OrderLifecycleLogger extends Component
             }
         }
 
+        // Payment captured: show the amount, and say so when it failed
+        if ($type === EventType::PAYMENT_CAPTURED) {
+            $amount = $current['payload']['amount'] ?? null;
+            $currency = $current['payload']['currency'] ?? ($current['order']['currency'] ?? null);
+
+            if ($amount !== null && $currency !== null) {
+                $formatted = Craft::$app->getFormatter()->asCurrency((float)$amount, strtoupper($currency));
+
+                return ($current['payload']['success'] ?? true) === false
+                    ? Craft::t('order-lifecycle', 'Capture of {amount} failed', ['amount' => $formatted])
+                    : Craft::t('order-lifecycle', '{amount} captured', ['amount' => $formatted]);
+            }
+        }
+
         // Payment refunded: show the amount refunded and via which gateway
         if ($type === EventType::PAYMENT_REFUNDED) {
             $amount = $current['payload']['amount'] ?? null;
@@ -477,6 +608,15 @@ class OrderLifecycleLogger extends Component
 
             if ($amount !== null && $currency !== null) {
                 $formatted = Craft::$app->getFormatter()->asCurrency((float)$amount, strtoupper($currency));
+
+                if (($current['payload']['success'] ?? true) === false) {
+                    return $gateway
+                        ? Craft::t('order-lifecycle', 'Refund of {amount} via {gateway} failed', [
+                            'amount' => $formatted,
+                            'gateway' => Formatter::sanitize($gateway),
+                        ])
+                        : Craft::t('order-lifecycle', 'Refund of {amount} failed', ['amount' => $formatted]);
+                }
 
                 return $gateway
                     ? Craft::t('order-lifecycle', '{amount} refunded via {gateway}', [
@@ -592,7 +732,7 @@ class OrderLifecycleLogger extends Component
      * @param int $orderId The order ID.
      * @param EventType $type The event type to search for.
      * @return array|null The log record, or null if not found.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getLastLogForOrderAndType(int $orderId, EventType $type): ?array
@@ -600,7 +740,7 @@ class OrderLifecycleLogger extends Component
         $row = (new Query())
             ->from('{{%orderlifecycle_logs}}')
             ->where(['orderId' => $orderId, 'type' => $type->value])
-            ->orderBy(['dateCreated' => SORT_DESC])
+            ->orderBy(['dateCreated' => SORT_DESC, 'id' => SORT_DESC])
             ->limit(1)
             ->one();
 
@@ -613,7 +753,7 @@ class OrderLifecycleLogger extends Component
      * @param int $logId The log entry ID to delete.
      * @return void
      * @throws Exception If the delete command fails.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function deleteLog(int $logId): void
@@ -629,7 +769,7 @@ class OrderLifecycleLogger extends Component
      * @param int $orderId The order ID whose logs should be deleted.
      * @return void
      * @throws Exception If the delete command fails.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function deleteLogsForOrder(int $orderId): void
@@ -647,7 +787,7 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If the log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function logTransaction(\craft\commerce\models\Transaction $transaction): void
@@ -666,12 +806,17 @@ class OrderLifecycleLogger extends Component
         ];
 
         $message = null;
-        if ($transaction->status === 'failed') {
+        if ($transaction->status === TransactionRecord::STATUS_FAILED) {
             $logData['code'] = $transaction->code;
             $logData['message'] = $transaction->message;
-            $message = 'Payment ' . Formatter::sanitize((string)$transaction->type) . ' failed: ' . Formatter::sanitize((string)$transaction->message);
-        } elseif ($transaction->status === 'success') {
-            $message = 'Payment ' . Formatter::sanitize((string)$transaction->type) . ' succeeded';
+            $message = Craft::t('order-lifecycle', 'Payment {type} failed: {reason}', [
+                'type' => Formatter::sanitize((string)$transaction->type),
+                'reason' => Formatter::sanitize((string)$transaction->message),
+            ]);
+        } elseif ($transaction->status === TransactionRecord::STATUS_SUCCESS) {
+            $message = Craft::t('order-lifecycle', 'Payment {type} succeeded', [
+                'type' => Formatter::sanitize((string)$transaction->type),
+            ]);
         }
 
         $this->log($order, EventType::PAYMENT_TRANSACTION, $logData, $message);
@@ -687,14 +832,14 @@ class OrderLifecycleLogger extends Component
      * @param array $updates The fields to update (column => value pairs).
      * @return void
      * @throws Exception If the update command fails.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function updateLog(int $logId, array $updates): void
     {
         Craft::$app->getDb()->createCommand()
             ->update('{{%orderlifecycle_logs}}', array_merge($updates, [
-                'dateUpdated' => new Expression('NOW()'),
+                'dateUpdated' => self::now(),
             ]), ['id' => $logId])
             ->execute();
     }
@@ -711,11 +856,16 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If the log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function logCheckoutStarted(Order $order): bool
     {
+        // A cart Commerce hasn't saved yet has nothing to log against.
+        if (!$order->id) {
+            return false;
+        }
+
         $existingCheckout = $this->getLastLogForOrderAndType($order->id, EventType::CHECKOUT_STARTED);
 
         if ($existingCheckout) {
@@ -750,12 +900,22 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If a log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function logOrderSaveChanges(Order $order, bool $isNew): void
     {
-        $settings = OrderLifecycle::$plugin->settings;
+        $settings = OrderLifecycle::$plugin->getSettings();
+        $orderId = (int)$order->id;
+
+        // The snapshot noted as the save began, if one was: events logged
+        // during the save have moved the latest snapshot on already.
+        $preSave = $this->_preSave[$orderId] ?? null;
+        unset($this->_preSave[$orderId]);
+
+        if (!$order->isCompleted && $this->_cartEventCount($orderId) >= self::MAX_CART_EVENTS) {
+            return;
+        }
 
         if ($isNew) {
             // no previous snapshot yet, so generateChangeDescription() won't
@@ -766,7 +926,7 @@ class OrderLifecycleLogger extends Component
             $this->log($order, EventType::CART_CREATED, [], $message);
         }
 
-        $previous = $this->getLastSnapshot((int)$order->id);
+        $previous = $preSave ?? $this->getLastSnapshot($orderId);
 
         if ($previous === null) {
             if (!$isNew) {
@@ -793,7 +953,7 @@ class OrderLifecycleLogger extends Component
         }
 
         if ($settings->logLineItems && isset($previous['lineItems'])) {
-            $this->_logLineItemQuantityChanges($order, $previous['lineItems']);
+            $this->_logLineItemQuantityChanges($order, $previous);
         }
     }
 
@@ -805,8 +965,6 @@ class OrderLifecycleLogger extends Component
      *
      * @param int|null $orderId The order ID carried by the failed job.
      * @param int|null $emailId The Commerce email ID carried by the failed job.
-     * @param string|null $orderNumber The order number carried by the failed job.
-     * @param string|null $orderReference The order reference carried by the failed job.
      * @param int $attempt The attempt number reported by the queue.
      * @param string|null $jobId The queue job ID, if known.
      * @param Throwable|null $error The error that caused the job to fail.
@@ -814,27 +972,26 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If a log row cannot be inserted or updated.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function logFailedEmailJob(
         ?int $orderId,
         ?int $emailId,
-        ?string $orderNumber,
-        ?string $orderReference,
         int $attempt,
         ?string $jobId,
         ?Throwable $error,
     ): void {
-        $order = $this->_resolveOrderForFailedEmail($orderId, $orderNumber);
+        $order = $orderId !== null ? Order::find()->id($orderId)->status(null)->one() : null;
 
-        if ($order === null) {
+        if (!$order instanceof Order) {
             return;
         }
 
         $emailName = null;
         if ($emailId !== null) {
-            $email = Commerce::getInstance()->getEmails()->getEmailById($emailId);
+            // Commerce 5 emails belong to a store
+            $email = Commerce::getInstance()->getEmails()->getEmailById($emailId, $order->storeId);
             $emailName = $email->name ?? null;
         }
 
@@ -849,7 +1006,7 @@ class OrderLifecycleLogger extends Component
             $snapshot['payload']['lastErrorClass'] = $errorClass;
 
             $this->updateLog((int)$existingLog['id'], [
-                'message' => "Email queue job failed after $attempt attempt(s): $errorMsg",
+                'message' => Craft::t('order-lifecycle', 'Email queue job failed after {attempt} attempt(s): {error}', ['attempt' => $attempt, 'error' => $errorMsg]),
                 'snapshot' => Json::encode($snapshot),
             ]);
 
@@ -857,14 +1014,14 @@ class OrderLifecycleLogger extends Component
         }
 
         $message = $attempt > 1
-            ? "Email queue job failed after $attempt attempt(s): $errorMsg"
-            : "Email queue job failed: $errorMsg";
+            ? Craft::t('order-lifecycle', 'Email queue job failed after {attempt} attempt(s): {error}', ['attempt' => $attempt, 'error' => $errorMsg])
+            : Craft::t('order-lifecycle', 'Email queue job failed: {error}', ['error' => $errorMsg]);
 
         $this->log($order, EventType::EMAIL_FAILED, [
             'emailId' => $emailId,
             'emailName' => $emailName,
-            'orderNumber' => $orderNumber,
-            'orderReference' => $orderReference,
+            'orderNumber' => $order->number,
+            'orderReference' => $order->reference,
             'error' => $errorMsg,
             'errorClass' => $errorClass,
             'attempt' => $attempt,
@@ -873,33 +1030,168 @@ class OrderLifecycleLogger extends Component
     }
 
     /**
-     * Deletes logs for orders that no longer exist (deleted or trashed).
+     * The entries of orders that no longer exist.
      *
-     * Shared by the garbage-collection listener and the console purge command so
-     * both use identical orphan-detection logic.
+     * A trashed order is not an orphan: it is restorable for as long as the
+     * soft-delete duration allows, and it has to come back with its timeline
+     * intact. Craft's own garbage collection removes the elements row once that
+     * window closes, and the next pass takes the logs with it.
+     *
+     * Shared by the delete below and the console command's dry run, so the
+     * count it shows is what would go.
+     *
+     * @return Query The matching log rows.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function orphanedLogsQuery(): Query
+    {
+        return (new Query())
+            ->from(['l' => '{{%orderlifecycle_logs}}'])
+            ->leftJoin(['e' => '{{%elements}}'], '[[e.id]] = [[l.orderId]]')
+            ->where(['e.id' => null]);
+    }
+
+    /**
+     * Deletes logs for orders that no longer exist.
      *
      * @return int The number of log rows deleted.
      * @throws Exception If the delete command fails.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function deleteOrphanedLogs(): int
     {
-        $orphanedIds = (new Query())
-            ->select('orderId')
-            ->from([
-                'tmp' => (new Query())
-                    ->select('[[l.orderId]]')
-                    ->from('{{%orderlifecycle_logs}} l')
-                    ->leftJoin('{{%elements}} e', '[[e.id]] = [[l.orderId]]')
-                    ->where(['OR',
-                        ['e.id' => null],
-                        ['NOT', ['e.dateDeleted' => null]],
-                    ]),
-            ]);
+        $deleted = 0;
+
+        do {
+            $ids = $this->orphanedLogsQuery()
+                ->select(['l.id'])
+                ->limit(self::PRUNE_BATCH_SIZE)
+                ->column();
+
+            if ($ids === []) {
+                break;
+            }
+
+            $deleted += Craft::$app->getDb()->createCommand()
+                ->delete('{{%orderlifecycle_logs}}', ['id' => $ids])
+                ->execute();
+        } while (count($ids) === self::PRUNE_BATCH_SIZE);
+
+        return $deleted;
+    }
+
+    /**
+     * The condition matching entries older than a number of days.
+     *
+     * @param int $days The age in days.
+     * @return array A query condition.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public static function olderThanCondition(int $days): array
+    {
+        $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->modify("-$days days");
+
+        return ['<', 'dateCreated', $cutoff->format('Y-m-d H:i:s')];
+    }
+
+    /**
+     * Deletes one batch of entries older than a number of days.
+     *
+     * @param int $days The age in days; entries older than this go.
+     * @return int How many were deleted: fewer than a full batch means none are left.
+     * @throws Exception If the delete fails.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function deleteLogsOlderThan(int $days): int
+    {
+        $ids = (new Query())
+            ->select(['id'])
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(self::olderThanCondition($days))
+            ->orderBy(['id' => SORT_ASC])
+            ->limit(self::PRUNE_BATCH_SIZE)
+            ->column();
+
+        if ($ids === []) {
+            return 0;
+        }
 
         return Craft::$app->getDb()->createCommand()
-            ->delete('{{%orderlifecycle_logs}}', ['in', 'orderId', $orphanedIds])
+            ->delete('{{%orderlifecycle_logs}}', ['id' => $ids])
+            ->execute();
+    }
+
+    /**
+     * The log rows holding one customer's or one order's details.
+     *
+     * By email, it takes every order placed with that address, plus any log
+     * that recorded the address itself (an order whose email was changed
+     * away from it still holds the old one in its history).
+     *
+     * @param string|null $email A customer email address.
+     * @param int|null $orderId An order ID.
+     * @return Query The matching log rows.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function customerLogsQuery(?string $email, ?int $orderId): Query
+    {
+        $query = (new Query())->from('{{%orderlifecycle_logs}}');
+        $conditions = ['or'];
+
+        if ($orderId !== null) {
+            $conditions[] = ['orderId' => $orderId];
+        }
+
+        if ($email !== null && $email !== '') {
+            $orderIds = (new Query())
+                ->select(['id'])
+                ->from('{{%commerce_orders}}')
+                ->where(['email' => $email]);
+            $conditions[] = ['orderId' => $orderIds];
+            $conditions[] = ['like', 'snapshot', Json::encode($email)];
+        }
+
+        return $query->where(count($conditions) > 1 ? $conditions : '0=1');
+    }
+
+    /**
+     * Deletes the log rows holding one customer's or one order's details,
+     * for a request to erase them.
+     *
+     * The rows are deleted rather than edited: a snapshot keeps the customer's
+     * details in several places, and a history with one detail blanked out
+     * still identifies them by the rest.
+     *
+     * @param string|null $email A customer email address.
+     * @param int|null $orderId An order ID.
+     * @return int How many rows were deleted.
+     * @throws Exception If the delete fails.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function eraseLogs(?string $email, ?int $orderId): int
+    {
+        $ids = $this->customerLogsQuery($email, $orderId)->select(['id'])->column();
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        foreach (array_unique(array_map('intval', (new Query())
+            ->select(['orderId'])
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['id' => $ids])
+            ->column())) as $affectedOrderId) {
+            $this->clearSnapshotCache($affectedOrderId);
+        }
+
+        return Craft::$app->getDb()->createCommand()
+            ->delete('{{%orderlifecycle_logs}}', ['id' => $ids])
             ->execute();
     }
 
@@ -908,39 +1200,76 @@ class OrderLifecycleLogger extends Component
     // =========================================================================
 
     /**
-     * Decodes a log's JSON snapshot and returns just its top-level `order` section.
+     * Builds an order snapshot, generates a change-description message and
+     * assembles the log row ready for insertion, updating the snapshot
+     * caches along the way.
      *
-     * @param string|null $snapshot The log's JSON snapshot.
-     * @return array|null The decoded `order` section, or null if absent/malformed.
-     * @author John Henry Donovan
+     * Always synchronous: message generation needs to diff against the
+     * actual previous snapshot at the moment of the event, not whatever
+     * happens to be the "last" snapshot whenever a deferred job eventually
+     * runs.
+     *
+     * @param Order $order The order to log the event for.
+     * @param EventType $type The type of lifecycle event.
+     * @param array $payload Additional data to include in the snapshot.
+     * @param string|null $message Optional custom message (auto-generated if null).
+     * @param array|null $previous The snapshot to describe the change against, or null for the latest.
+     * @return array The prepared log row, ready to pass to insertLogRow().
+     * @throws \yii\base\Exception If a random UID cannot be generated.
+     * @throws InvalidConfigException If a required component cannot be resolved.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    private function _decodeOrderSnapshot(?string $snapshot): ?array
+    private function _prepareLogData(Order $order, EventType $type, array $payload, ?string $message, ?array $previous = null): array
     {
-        if ($snapshot === null || $snapshot === '') {
-            return null;
+        $settings = OrderLifecycle::$plugin->getSettings();
+        $orderId = (int)$order->id;
+
+        // grab this before we touch the cache below, or we'd diff against ourselves
+        $previousSnapshot = $previous ?? $this->getLastSnapshot($orderId);
+
+        $currentSnapshot = $this->_buildSnapshot($order, $payload);
+
+        if ($message === null && $previousSnapshot !== null) {
+            $message = $this->generateChangeDescription($previousSnapshot, $currentSnapshot, $type);
         }
 
-        try {
-            $decoded = Json::decode($snapshot);
-        } catch (InvalidArgumentException) {
-            return null;
-        }
+        $now = self::now();
 
-        $order = is_array($decoded) ? ($decoded['order'] ?? null) : null;
+        // getUserIP() only exists on the web request; when this runs on the
+        // queue (LogOrderEventDeferredJob, or any listener firing inside another
+        // queue job) the request is a console request with no client IP to
+        // capture, so record null rather than calling a method that isn't there.
+        $request = Craft::$app->getRequest();
 
-        return is_array($order) ? $order : null;
+        $logData = [
+            'orderId' => $orderId,
+            'storeId' => $order->storeId,
+            'type' => $type->value,
+            'message' => $message,
+            'snapshot' => Json::encode($currentSnapshot),
+            'userId' => $settings->collectUserId ? Craft::$app->getUser()->getId() : null,
+            'ip' => $settings->collectUserIp && !$request->getIsConsoleRequest() ? $request->getUserIP() : null,
+            'dateCreated' => $now,
+            'dateUpdated' => $now,
+            'uid' => StringHelper::UUID(),
+        ];
+
+        $this->_snapshotCache[$orderId] = $currentSnapshot;
+        Craft::$app->getCache()->set("ol_snapshot_{$orderId}", $currentSnapshot, 7200);
+
+        return $logData;
     }
 
     /**
-     * Decodes a log's JSON snapshot and returns just its top-level `payload` section.
+     * Decodes a log's JSON snapshot.
      *
      * @param string|null $snapshot The log's JSON snapshot.
-     * @return array|null The decoded `payload` section, or null if absent/malformed.
-     * @author John Henry Donovan
+     * @return array|null The decoded snapshot, or null if absent or malformed.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    private function _decodeSnapshotPayload(?string $snapshot): ?array
+    private function _decodeSnapshot(?string $snapshot): ?array
     {
         if ($snapshot === null || $snapshot === '') {
             return null;
@@ -952,9 +1281,22 @@ class OrderLifecycleLogger extends Component
             return null;
         }
 
-        $payload = is_array($decoded) ? ($decoded['payload'] ?? null) : null;
+        return is_array($decoded) ? $decoded : null;
+    }
 
-        return is_array($payload) ? $payload : null;
+    /**
+     * Picks the top-level `order` section out of a decoded snapshot.
+     *
+     * @param array|null $snapshot The decoded snapshot.
+     * @return array|null The `order` section, or null where it is absent or not an array.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    private static function _orderSection(?array $snapshot): ?array
+    {
+        $order = $snapshot['order'] ?? null;
+
+        return is_array($order) ? $order : null;
     }
 
     /**
@@ -963,7 +1305,7 @@ class OrderLifecycleLogger extends Component
      * @param array|null $current The current log's decoded `order` section.
      * @param array|null $previous The previous chronological log's decoded `order` section, or null if there isn't one.
      * @return array A list of ['field' => ..., 'label' => ..., 'from' => ..., 'to' => ...] entries for changed fields.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _diffOrderSnapshot(?array $current, ?array $previous): array
@@ -1004,7 +1346,7 @@ class OrderLifecycleLogger extends Component
      * @param array|null $previous The previous field values to diff against, or null if there aren't any.
      * @param callable $labelResolver Resolves a field name to its human-readable label.
      * @return array A list of ['field' => ..., 'label' => ..., 'from' => ..., 'to' => ...] entries for changed fields.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _diffFields(?array $current, ?array $previous, callable $labelResolver): array
@@ -1053,7 +1395,7 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If a log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _logCouponChange(Order $order, array $previous): void
@@ -1065,10 +1407,12 @@ class OrderLifecycleLogger extends Component
             return;
         }
 
-        $this->log(
+        $this->_log(
             $order,
             $after ? EventType::COUPON_APPLIED : EventType::COUPON_REMOVED,
-            compact('before', 'after')
+            compact('before', 'after'),
+            null,
+            $previous,
         );
     }
 
@@ -1081,7 +1425,7 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If a log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _logAddressChanges(Order $order, array $previous): void
@@ -1102,7 +1446,7 @@ class OrderLifecycleLogger extends Component
 
             $eventType = $currData ? $eventTypeSet : $eventTypeRemoved;
             $message = Formatter::addressChange($prevData, $currData, $key);
-            $this->log($order, $eventType, ['before' => $prevData, 'after' => $currData], $message);
+            $this->_log($order, $eventType, ['before' => $prevData, 'after' => $currData], $message, $previous);
         }
     }
 
@@ -1115,7 +1459,7 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If a log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _logCustomerChange(Order $order, array $previous): void
@@ -1131,10 +1475,12 @@ class OrderLifecycleLogger extends Component
         $customerType = $customer ? 'customer' : 'guest';
         $customerId = $customer?->id;
 
-        $this->log(
+        $this->_log(
             $order,
             $after ? EventType::CUSTOMER_SET : EventType::CUSTOMER_REMOVED,
-            compact('before', 'after', 'customerType', 'customerId')
+            compact('before', 'after', 'customerType', 'customerId'),
+            null,
+            $previous,
         );
     }
 
@@ -1147,7 +1493,7 @@ class OrderLifecycleLogger extends Component
      * @throws Exception If a log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _logShippingMethodChange(Order $order, array $previous): void
@@ -1164,23 +1510,25 @@ class OrderLifecycleLogger extends Component
             return;
         }
 
-        $this->log($order, EventType::SHIPPING_METHOD_SET, compact('before', 'after'));
+        $this->_log($order, EventType::SHIPPING_METHOD_SET, compact('before', 'after'), null, $previous);
     }
 
     /**
      * Logs per-SKU line-item quantity changes detected against the snapshot.
      *
      * @param Order $order The saved order.
-     * @param array $previousLineItems The previous snapshot's line items.
+     * @param array $previous The snapshot the order had before this save.
      * @return void
      * @throws Exception If a log row cannot be inserted.
      * @throws \yii\base\Exception If a random UID cannot be generated.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    private function _logLineItemQuantityChanges(Order $order, array $previousLineItems): void
+    private function _logLineItemQuantityChanges(Order $order, array $previous): void
     {
+        $previousLineItems = $previous['lineItems'] ?? [];
+
         $currentLineItems = [];
         foreach ($order->getLineItems() as $lineItem) {
             $currentLineItems[$lineItem->sku] = $lineItem;
@@ -1199,41 +1547,13 @@ class OrderLifecycleLogger extends Component
                 continue;
             }
 
-            $this->log($order, EventType::LINE_ITEM_UPDATED, [
+            $this->_log($order, EventType::LINE_ITEM_UPDATED, [
                 'sku' => $li->sku,
                 'qtyBefore' => $prevQty,
                 'qtyAfter' => $li->qty,
                 'subtotal' => $li->getSubtotal(),
-            ]);
+            ], null, $previous);
         }
-    }
-
-    /**
-     * Resolves the order for a failed email job by ID, falling back to number.
-     *
-     * @param int|null $orderId The order ID carried by the failed job.
-     * @param string|null $orderNumber The order number carried by the failed job.
-     * @return Order|null The resolved order, or null if it cannot be found.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _resolveOrderForFailedEmail(?int $orderId, ?string $orderNumber): ?Order
-    {
-        if ($orderId !== null) {
-            $order = Order::find()->id($orderId)->one();
-            if ($order instanceof Order) {
-                return $order;
-            }
-        }
-
-        if ($orderNumber !== null) {
-            $order = Order::find()->number($orderNumber)->one();
-            if ($order instanceof Order) {
-                return $order;
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -1242,7 +1562,7 @@ class OrderLifecycleLogger extends Component
      * @param array|null $existingLog The most recent EMAIL_FAILED log, if any.
      * @param int|null $emailId The Commerce email ID of the current failure.
      * @return bool Whether the failure should be consolidated into the existing log.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _isSameFailedEmail(?array $existingLog, ?int $emailId): bool
@@ -1253,9 +1573,25 @@ class OrderLifecycleLogger extends Component
 
         $snapshot = Json::decodeIfJson($existingLog['snapshot']);
         $existingEmailId = $snapshot['payload']['emailId'] ?? null;
-        $timeDiff = time() - strtotime($existingLog['dateCreated']);
+        $timeDiff = time() - self::rowDate($existingLog['dateCreated'])->getTimestamp();
 
         return $existingEmailId === $emailId && $timeDiff < 300;
+    }
+
+    /**
+     * How many events an order has recorded.
+     *
+     * @param int $orderId The order ID.
+     * @return int
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    private function _cartEventCount(int $orderId): int
+    {
+        return (int)(new Query())
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['orderId' => $orderId])
+            ->count();
     }
 
     /**
@@ -1268,7 +1604,7 @@ class OrderLifecycleLogger extends Component
      * @param array $payload Additional data to include in the snapshot.
      * @return array The complete order snapshot.
      * @throws InvalidConfigException If the shipping method cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _buildSnapshot(Order $order, array $payload): array
@@ -1333,7 +1669,7 @@ class OrderLifecycleLogger extends Component
      * @param string $handle The shipping method handle.
      * @return string|null The shipping method name, or null if not found.
      * @throws InvalidConfigException If the Commerce shipping methods service is unavailable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _getShippingMethodName(string $handle): ?string
@@ -1358,7 +1694,7 @@ class OrderLifecycleLogger extends Component
      *
      * @param \craft\elements\Address|null $address The address to serialize, or null.
      * @return array|null The serialized address fields, or null when no address is given.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _serializeAddress(?\craft\elements\Address $address): ?array

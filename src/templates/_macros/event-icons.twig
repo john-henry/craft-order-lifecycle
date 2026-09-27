@@ -1,17 +1,12 @@
-{#
-Event Icons Macro
-Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
-#}
-
-{% macro eventIcon(eventType, transactions = null, snapshot = null) %}
+{% macro eventIcon(eventType, transactionStatus = null) %}
     {% if eventType starts with 'cart' %}
-        <span class="status-icon cart">
+        <span class="status-icon cart" aria-hidden="true">
 		 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 		   <path d="M1.75 1.002a.75.75 0 1 0 0 1.5h1.835l1.24 5.113A3.752 3.752 0 0 0 2 11.25c0 .414.336.75.75.75h10.5a.75.75 0 0 0 0-1.5H3.628A2.25 2.25 0 0 1 5.75 9h6.5a.75.75 0 0 0 .73-.578l.846-3.595a.75.75 0 0 0-.578-.906 44.118 44.118 0 0 0-7.996-.91l-.348-1.436a.75.75 0 0 0-.73-.573H1.75ZM5 14a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM13 14a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>
 		 </svg>
 		</span>
     {% elseif eventType starts with 'lineItem' %}
-        <span class="status-icon item">
+        <span class="status-icon item" aria-hidden="true">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 				<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
 				<polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
@@ -19,48 +14,36 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 			</svg>
 		</span>
     {% elseif eventType == 'orderCompleted' %}
-        <span class="status-icon order-completed">
+        <span class="status-icon order-completed" aria-hidden="true">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 				<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
 				<line x1="4" y1="22" x2="4" y2="15"></line>
 			</svg>
 		</span>
     {% elseif eventType starts with 'order' %}
-        <span class="status-icon order">
+        <span class="status-icon order" aria-hidden="true">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 				<path d="M9 11l3 3L22 4"></path>
 				<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
 			</svg>
 		</span>
     {% elseif eventType starts with 'payment' %}
-        {% set snapshotData = snapshot|json_decode %}
-        {% set payloadTransactionId = snapshotData.payload.transactionId ?? null %}
-        {% set transactionStatus = null %}
-        
-        {% if payloadTransactionId and transactions %}
-            {% for transaction in transactions %}
-                {% if transaction.id == payloadTransactionId %}
-                    {% set transactionStatus = transaction.status %}
-                {% endif %}
-            {% endfor %}
-        {% endif %}
-        
         {% if transactionStatus == 'success' %}
-            <span class="status-icon payment success">
+            <span class="status-icon payment success" aria-hidden="true">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 					<line x1="12" y1="1" x2="12" y2="23"></line>
 					<path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
 				</svg>
 			</span>
         {% elseif transactionStatus == 'failed' %}
-            <span class="status-icon payment error">
+            <span class="status-icon payment error" aria-hidden="true">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 					<line x1="12" y1="1" x2="12" y2="23"></line>
 					<path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
 				</svg>
 			</span>
         {% else %}
-            <span class="status-icon payment">
+            <span class="status-icon payment" aria-hidden="true">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 					<line x1="12" y1="1" x2="12" y2="23"></line>
 					<path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
@@ -68,27 +51,27 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 			</span>
         {% endif %}
     {% elseif eventType starts with 'shipping' or eventType starts with 'billing' %}
-        <span class="status-icon address">
+        <span class="status-icon address" aria-hidden="true">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 				<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
 				<circle cx="12" cy="10" r="3"></circle>
 			</svg>
 		</span>
     {% elseif eventType == 'emailSent' or eventType == 'emailFailed' %}
-        <span class="status-icon email {% if eventType == 'emailFailed' %}error{% endif %}">
+        <span class="status-icon email {% if eventType == 'emailFailed' %}error{% endif %}" aria-hidden="true">
 			<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 				<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
 				<polyline points="22,6 12,13 2,6"></polyline>
 			</svg>
 		</span>
     {% elseif eventType == 'customerSet' %}
-        <span class="status-icon customer-set">
+        <span class="status-icon customer-set" aria-hidden="true">
 		 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
   <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12.735 14c.618 0 1.093-.561.872-1.139a6.002 6.002 0 0 0-11.215 0c-.22.578.254 1.139.872 1.139h9.47Z"/>
 </svg>
 		</span>
     {% elseif eventType == 'statusChanged' %}
-        <span class="status-icon status-update">
+        <span class="status-icon status-update" aria-hidden="true">
 			<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 				<polyline points="1 4 1 10 7 10"></polyline>
 				<polyline points="23 20 23 14 17 14"></polyline>
@@ -96,7 +79,7 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 			</svg>
 		</span>
     {% elseif eventType == 'checkoutStarted' %}
-        <span class="status-icon checkout">
+        <span class="status-icon checkout" aria-hidden="true">
 		 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 			<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
 			<line x1="3" y1="6" x2="21" y2="6"></line>
@@ -104,7 +87,7 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 		 </svg>
 	  </span>
     {% elseif eventType starts with 'coupon' %}
-        <span class="status-icon coupon">
+        <span class="status-icon coupon" aria-hidden="true">
 		 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
 			<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
 			<circle cx="12" cy="12" r="1"></circle>
@@ -113,6 +96,6 @@ Usage: {{ icons.eventIcon(row.type, transactions, row.snapshot) }}
 		 </svg>
 	  </span>
     {% else %}
-        <span class="status-icon default"></span>
+        <span class="status-icon default" aria-hidden="true"></span>
     {% endif %}
 {% endmacro %}

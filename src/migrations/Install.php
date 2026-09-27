@@ -14,7 +14,7 @@ use craft\db\Migration;
  *
  * Creates the order lifecycle logs table, its indexes and foreign keys.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class Install extends Migration
@@ -27,7 +27,7 @@ class Install extends Migration
      * @inheritdoc
      *
      * @return bool Whether the migration applied successfully.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function safeUp(): bool
@@ -46,7 +46,7 @@ class Install extends Migration
      * @inheritdoc
      *
      * @return bool Whether the migration reverted successfully.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function safeDown(): bool
@@ -62,30 +62,35 @@ class Install extends Migration
     /**
      * Creates the plugin's database tables.
      *
-     * @return bool Always true once the tables exist.
-     * @author John Henry Donovan
+     * @return bool Whether the table was created here; false when it already
+     *              existed, so re-running the install adds no second set of
+     *              indexes and keys.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function createTables(): bool
     {
-        if (!$this->db->tableExists('{{%orderlifecycle_logs}}')) {
-            // microsecond precision so same-second events keep their insert order
-            $microsecondDateTime = $this->db->getIsPgsql() ? 'timestamp(6)' : 'datetime(6)';
-
-            $this->createTable('{{%orderlifecycle_logs}}', [
-                'id' => $this->primaryKey(),
-                'orderId' => $this->integer()->notNull(),
-                'storeId' => $this->integer()->null(),
-                'type' => $this->string(50)->notNull(),
-                'message' => $this->text()->null(),
-                'snapshot' => $this->mediumText()->null(), // JSON
-                'userId' => $this->integer()->null(),
-                'ip' => $this->string(45)->null(),   // IPv4/IPv6
-                'dateCreated' => "$microsecondDateTime NOT NULL",
-                'dateUpdated' => "$microsecondDateTime NOT NULL",
-                'uid' => $this->uid(),
-            ]);
+        if ($this->db->tableExists('{{%orderlifecycle_logs}}')) {
+            return false;
         }
+
+        // microsecond precision so same-second events keep their insert order
+        $microsecondDateTime = $this->db->getIsPgsql() ? 'timestamp(6)' : 'datetime(6)';
+
+        $this->createTable('{{%orderlifecycle_logs}}', [
+            'id' => $this->primaryKey(),
+            'orderId' => $this->integer()->notNull(),
+            'storeId' => $this->integer()->null(),
+            'type' => $this->string(50)->notNull(),
+            'message' => $this->text()->null(),
+            'snapshot' => $this->mediumText()->null(), // JSON
+            'userId' => $this->integer()->null(),
+            'ip' => $this->string(45)->null(),   // IPv4/IPv6
+            'dateCreated' => "$microsecondDateTime NOT NULL",
+            'dateUpdated' => "$microsecondDateTime NOT NULL",
+            'uid' => $this->uid(),
+        ]);
+
         return true;
     }
 
@@ -93,7 +98,7 @@ class Install extends Migration
      * Creates the indexes for the plugin's tables.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function createIndexes(): void
@@ -103,13 +108,15 @@ class Install extends Migration
         $this->createIndex(null, '{{%orderlifecycle_logs}}', ['userId']);
         $this->createIndex(null, '{{%orderlifecycle_logs}}', ['type']);
         $this->createIndex(null, '{{%orderlifecycle_logs}}', ['storeId']);
+        // the stats read by store, type and date
+        $this->createIndex(null, '{{%orderlifecycle_logs}}', ['storeId', 'type', 'dateCreated']);
     }
 
     /**
      * Adds the foreign keys for the plugin's tables.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function addForeignKeys(): void

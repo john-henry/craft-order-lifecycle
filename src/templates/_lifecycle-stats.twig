@@ -1,9 +1,3 @@
-{# =========================================================================
-   Order Lifecycle Metrics
-   Card summary of the order's key conversion metrics (time to convert,
-   checkout duration, cart activity, customer type) plus a started/completed
-   summary bar with request origin.
-   ========================================================================= #}
 <div class="lifecycle-stats">
    {% set cartCreated = null %}
    {% set firstCartActivity = null %}
@@ -14,26 +8,26 @@
    {% set itemsRemoved = 0 %}
    {% set firstIp = null %}
 
-   {% for log in logs %}
+   {% for log in logs|reverse|filter(log => log.type != 'aiInsights') %}
       {% if log.type == 'cartCreated' and cartCreated is null %}
-         {% set cartCreated = log.dateCreated|date('U') %}
-         {% set firstCartActivity = log.dateCreated|date('U') %}
+         {% set cartCreated = log.date|date('U') %}
+         {% set firstCartActivity = log.date|date('U') %}
       {% endif %}
 
       {% if firstCartActivity is null and (log.type == 'lineItemAdded' or log.type == 'lineItemRemoved' or log.type == 'cartUpdated') %}
-         {% set firstCartActivity = log.dateCreated|date('U') %}
+         {% set firstCartActivity = log.date|date('U') %}
       {% endif %}
 
       {% if log.type == 'checkoutStarted' and checkoutStarted is null %}
-         {% set checkoutStarted = log.dateCreated|date('U') %}
+         {% set checkoutStarted = log.date|date('U') %}
       {% endif %}
 
       {% if log.type == 'orderCompleted' and orderCompleted is null %}
-         {% set orderCompleted = log.dateCreated|date('U') %}
+         {% set orderCompleted = log.date|date('U') %}
       {% endif %}
 
       {% if log.type == 'orderPaid' and orderPaid is null %}
-         {% set orderPaid = log.dateCreated|date('U') %}
+         {% set orderPaid = log.date|date('U') %}
       {% endif %}
 
       {% if log.type == 'lineItemAdded' %}
@@ -98,16 +92,15 @@
          <div class="lifecycle-metric-card">
             <div class="lifecycle-metric-label">{{ 'Cart Items'|t('order-lifecycle') }}</div>
             <div class="lifecycle-metric-value">
-               <span class="success">{{ itemsAdded }}</span> {{ 'added'|t('order-lifecycle') }}
+               {{ '{count} added'|t('order-lifecycle', { count: '<span class="success">' ~ itemsAdded ~ '</span>' })|raw }}
             </div>
             <div class="lifecycle-metric-sub">
-               {{ itemsRemoved }} {{ 'removed'|t('order-lifecycle') }}
+               {{ '{count} removed'|t('order-lifecycle', { count: itemsRemoved }) }}
             </div>
          </div>
       {% endif %}
 
       {% if order is defined %}
-         {% set previousOrders = craft.orderLifecycle.stats.getPreviousOrderCount(order) %}
          <div class="lifecycle-metric-card">
             <div class="lifecycle-metric-label">{{ 'Customer'|t('order-lifecycle') }}</div>
             <div class="lifecycle-metric-value">
@@ -115,7 +108,7 @@
             </div>
             <div class="lifecycle-metric-sub">
                {% if previousOrders > 0 %}
-                  {{ previousOrders }} {{ previousOrders == 1 ? 'previous order'|t('order-lifecycle') : 'previous orders'|t('order-lifecycle') }}
+                  {{ '{count, plural, =1{# previous order} other{# previous orders}}'|t('order-lifecycle', { count: previousOrders }) }}
                {% else %}
                   {{ 'No previous orders'|t('order-lifecycle') }}
                {% endif %}
@@ -136,7 +129,12 @@
             <span class="lifecycle-summary-datetime">{{ orderCompleted ? orderCompleted|datetime('medium') : '-' }}</span>
          </div>
          <div class="lifecycle-summary-origin">
-            {{ 'Origin'|t('order-lifecycle') }}: {{ 'Web'|t('order-lifecycle') }}{% if firstIp %} · {{ 'IP'|t('order-lifecycle') }} {{ firstIp }}{% endif %}
+            {% set originLabel = {
+               web: 'Web'|t('order-lifecycle'),
+               cp: 'Control panel'|t('order-lifecycle'),
+               remote: 'Remote'|t('order-lifecycle'),
+            }[order.origin ?? 'web'] ?? order.origin %}
+            {{ 'Origin: {origin}'|t('order-lifecycle', { origin: originLabel }) }}{% if firstIp %} · {{ 'IP {ip}'|t('order-lifecycle', { ip: firstIp }) }}{% endif %}
          </div>
       </div>
    {% endif %}

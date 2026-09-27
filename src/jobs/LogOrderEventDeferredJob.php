@@ -11,27 +11,20 @@ use craft\commerce\elements\Order;
 use craft\queue\BaseJob;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
+use johnhenry\orderlifecycle\services\OrderLifecycleLogger;
 
 /**
  * Defers an entire log() call, snapshot build included, to the queue.
  *
- * This is the job {@see OrderLifecycleLogger::log()} pushes whenever the
- * plugin's asyncLogging setting is on, and what its email-listener callers
- * (Emails::EVENT_BEFORE_SEND_MAIL / EVENT_AFTER_SEND_MAIL, which run inside
- * Commerce's own SendEmailJob::execute()) always use regardless of that
- * setting. It carries only scalar properties (order ID, event type, payload,
- * message) and re-fetches the order and builds the snapshot itself once it
- * runs, rather than persisting a snapshot already built at dispatch time:
- * building a full order snapshot inline (line items, addresses, discounts,
- * a shipping method lookup) is the expensive part of logging, not the final
- * insert, so anywhere that inline cost would matter (an order save on a
- * busy checkout, or worse, inside another queue job's own execution, where a
- * slow-enough snapshot build can push that job past its time-to-reserve and
- * cause it to be treated as stuck and re-run from scratch, which for
- * Commerce's SendEmailJob means genuinely resending the email) needs the
- * whole operation deferred, not just the write.
+ * This is the job {@see OrderLifecycleLogger::logDeferred()} pushes, which the
+ * email listeners use: they run inside Commerce's own SendEmailJob, where
+ * building a full order snapshot inline could push that job past its
+ * time-to-reserve and have Commerce send the email again. It carries only
+ * scalar properties and builds the snapshot itself once it runs. (With
+ * asyncLogging on, log() pushes {@see LogOrderEventJob} instead, which only
+ * defers the write.)
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class LogOrderEventDeferredJob extends BaseJob
@@ -69,7 +62,7 @@ class LogOrderEventDeferredJob extends BaseJob
      *
      * @param mixed $queue The queue the job belongs to.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function execute($queue): void
@@ -79,8 +72,8 @@ class LogOrderEventDeferredJob extends BaseJob
             return;
         }
 
-        // writeLogNow(), not log() - log() would re-check asyncLogging and
-        // just push another deferred job, looping forever
+        // writeLogNow(), not log(): log() would re-check asyncLogging and
+        // push a second job just to do the write
         OrderLifecycle::$plugin->getLogger()->writeLogNow(
             $order,
             EventType::from($this->type),
@@ -97,7 +90,7 @@ class LogOrderEventDeferredJob extends BaseJob
      * @inheritdoc
      *
      * @return string|null The default queue job description.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string

@@ -138,7 +138,8 @@ function logCount(int $orderId, EventType $type): int
  */
 function insertBackdatedLog(int $orderId, EventType $type, string $at = 'now'): void
 {
-    $date = date('Y-m-d H:i:s', strtotime($at));
+    // stored times are UTC, whatever the process timezone
+    $date = gmdate('Y-m-d H:i:s', strtotime($at));
     // stamp the current store so these rows survive the store-scoped stats
     // queries, matching what the logger writes for a real order save
     $storeId = Commerce::getInstance()->getStores()->getCurrentStore()->id;
