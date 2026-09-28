@@ -15,13 +15,13 @@ use yii\base\InvalidConfigException;
  *
  * All methods are static and testable without full application context.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class Formatter
 {
     // =========================================================================
-    // Constants
+    // Const Properties
     // =========================================================================
 
     /**
@@ -49,7 +49,7 @@ class Formatter
      * @param string $currency The ISO currency code.
      * @return string The formatted currency string.
      * @throws InvalidConfigException If the formatter component is unavailable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function currency(float $amount, string $currency): string
@@ -64,7 +64,7 @@ class Formatter
      * @param string $format The format width (short, medium, long, full).
      * @return string The formatted date/time string.
      * @throws InvalidConfigException If the formatter component is unavailable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function dateTime(mixed $value, string $format = 'medium'): string
@@ -78,7 +78,7 @@ class Formatter
      * @param int $from The previous quantity.
      * @param int $to The new quantity.
      * @return string The change description.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function quantityChange(int $from, int $to): string
@@ -94,7 +94,7 @@ class Formatter
      * @param string $currency The ISO currency code.
      * @return string The change description.
      * @throws InvalidConfigException If the formatter component is unavailable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function priceChange(float $from, float $to, string $currency): string
@@ -110,7 +110,7 @@ class Formatter
      * @param string|null $from The previous coupon code.
      * @param string|null $to The new coupon code.
      * @return string|null The change description, or null if unchanged.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function couponChange(?string $from, ?string $to): ?string
@@ -136,7 +136,7 @@ class Formatter
      * @param string|null $from The previous status.
      * @param string|null $to The new status.
      * @return string|null The change description, or null if unchanged or cleared.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function statusChange(?string $from, ?string $to): ?string
@@ -154,7 +154,7 @@ class Formatter
      * @param string|null $from The previous shipping method.
      * @param string|null $to The new shipping method.
      * @return string|null The change description, or null if unchanged.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function shippingMethodChange(?string $from, ?string $to): ?string
@@ -185,7 +185,7 @@ class Formatter
      * @param string|null $to The new country.
      * @param string $type The address type (shipping or billing).
      * @return string|null The change description, or null if unchanged or cleared.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function countryChange(?string $from, ?string $to, string $type = 'shipping'): ?string
@@ -205,7 +205,7 @@ class Formatter
      * @param string|null $toEmail The new customer email.
      * @param string|null $customerType The customer type label (e.g. guest, registered).
      * @return string|null The change description, or null if unchanged.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function customerChange(?string $fromEmail, ?string $toEmail, ?string $customerType = null): ?string
@@ -237,7 +237,7 @@ class Formatter
      * @param array $previous Previous line items array.
      * @param array $current Current line items array.
      * @return array Array of change description strings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function compareLineItems(array $previous, array $current): array
@@ -291,14 +291,18 @@ class Formatter
      * @param array|null $to   Current address fields (null = address removed).
      * @param string     $type 'shipping' or 'billing'.
      * @return string|null
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function addressChange(?array $from, ?array $to, string $type = 'shipping'): ?string
     {
         $label = ucfirst($type) . ' address';
 
-        if ($from === null && $to !== null) {
+        if ($from === null && $to === null) {
+            return null;
+        }
+
+        if ($from === null) {
             $name = trim(($to['firstName'] ?? '') . ' ' . ($to['lastName'] ?? ''));
             $parts = array_filter([$name ?: null, $to['addressLine1'] ?? null, $to['locality'] ?? null, $to['countryCode'] ?? null]);
             $parts = array_map(static fn(string $part): string => self::sanitize($part), $parts);
@@ -307,12 +311,8 @@ class Formatter
             return $parts ? implode(', ', $parts) : null;
         }
 
-        if ($from !== null && $to === null) {
+        if ($to === null) {
             // event title already says "{Type} Address Removed"
-            return null;
-        }
-
-        if ($from === null || $to === null) {
             return null;
         }
 
@@ -345,7 +345,7 @@ class Formatter
      *
      * @param string $text The text to sanitize.
      * @return string The escaped text.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function sanitize(string $text): string
@@ -362,7 +362,7 @@ class Formatter
      *
      * @param string $field The raw snapshot field name (e.g. `statusHandle`).
      * @return string The human-readable label, or the field name humanised if unrecognised.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function orderFieldLabel(string $field): string
@@ -396,7 +396,7 @@ class Formatter
      *
      * @param string $field The raw address field name (e.g. `addressLine1`).
      * @return string The human-readable label, or the field name humanised if unrecognised.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function addressFieldLabel(string $field): string

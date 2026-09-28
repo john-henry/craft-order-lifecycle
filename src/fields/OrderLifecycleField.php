@@ -11,7 +11,11 @@ use craft\base\ElementInterface;
 use craft\base\Field;
 use craft\commerce\elements\Order;
 use craft\commerce\Plugin as Commerce;
+use craft\helpers\Html;
+use craft\models\GqlSchema;
 use johnhenry\orderlifecycle\assets\OrderLifecycleAsset;
+use johnhenry\orderlifecycle\controllers\AiController;
+use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
 use Throwable;
 
@@ -21,7 +25,7 @@ use Throwable;
  * Read-only Commerce order field that renders the recorded lifecycle events and
  * transactions for the order it is attached to.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class OrderLifecycleField extends Field
@@ -34,7 +38,7 @@ class OrderLifecycleField extends Field
      * @inheritdoc
      *
      * @return string The translated field display name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function displayName(): string
@@ -45,20 +49,23 @@ class OrderLifecycleField extends Field
     /**
      * @inheritdoc
      *
-     * @return bool Whether this field stores its value in a content column.
-     * @author John Henry Donovan
-     * @since 1.0.0
+     * The timeline is read from the plugin's own log table, so nothing is kept
+     * in the order's content.
+     *
+     * @return null No content to store.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
      */
-    public static function hasContentColumn(): bool
+    public static function dbType(): array|string|null
     {
-        return false;
+        return null;
     }
 
     /**
      * @inheritdoc
      *
      * @return string The field icon handle.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function icon(): string
@@ -69,15 +76,33 @@ class OrderLifecycleField extends Field
     /**
      * @inheritdoc
      *
-     * @return array The supported translation methods.
-     * @author John Henry Donovan
-     * @since 1.0.0
+     * The field never holds a value, so making it required would fail every
+     * save of the order it's on.
+     *
+     * @return bool Always false.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
      */
-    public static function supportedTranslationMethods(): array
+    public static function isRequirable(): bool
     {
-        return [
-            self::TRANSLATION_METHOD_NONE,
-        ];
+        return false;
+    }
+
+    // =========================================================================
+    // Public Methods
+    // =========================================================================
+
+    /**
+     * @inheritdoc
+     *
+     * @param GqlSchema $schema The schema being built.
+     * @return bool Always false: the field has no value to expose.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function includeInGqlSchema(GqlSchema $schema): bool
+    {
+        return false;
     }
 
     // =========================================================================
@@ -92,7 +117,7 @@ class OrderLifecycleField extends Field
      * @param bool $inline Whether the field is being rendered inline.
      * @return string The rendered input HTML.
      * @throws Throwable If the field template cannot be rendered.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function inputHtml(mixed $value, ?ElementInterface $element, bool $inline): string
@@ -118,10 +143,32 @@ class OrderLifecycleField extends Field
 
         Craft::$app->getView()->registerAssetBundle(OrderLifecycleAsset::class);
 
-        $logger = OrderLifecycle::getInstance()->getLogger();
+        $plugin = OrderLifecycle::getInstance();
+        $logger = $plugin->getLogger();
         $logs = $logger->getLogsForOrder($element->id);
-        $timeline = $logger->getTimelineForOrder($element->id);
-        $statuses = Commerce::getInstance()->getOrderStatuses()->getAllOrderStatuses();
+        $timeline = $logger->getTimelineForOrder($element->id, $logs);
+        // Status IDs belong to a store, so this order's store's statuses
+        $statuses = Commerce::getInstance()->getOrderStatuses()->getAllOrderStatuses($element->storeId);
+
+        // Keyed by id so a timeline row finds its transaction by lookup. The
+        // list itself is still passed: a refund event needs the children of the
+        // charge it matched, which is a scan either way.
+        $transactions = $element->getTransactions();
+        $transactionsById = [];
+        foreach ($transactions as $transaction) {
+            $transactionsById[(int)$transaction->id] = $transaction;
+        }
+
+        // Resolved here rather than in the template: a control panel screen has
+        // no business reaching through craft.orderLifecycle, which exists for
+        // front-end templates, or through craft.app.plugins to read settings.
+        $savedInsight = null;
+        foreach ($logs as $log) {
+            if ($log['type'] === EventType::AI_INSIGHTS->value) {
+                $savedInsight = $log;
+                break;
+            }
+        }
 
         return Craft::$app->getView()->renderTemplate('order-lifecycle/_field-input', [
             'order' => $element,
@@ -129,7 +176,16 @@ class OrderLifecycleField extends Field
             'timeline' => $timeline,
             'field' => $this,
             'statuses' => $statuses,
-            'transactions' => $element->getTransactions(),
+            'transactions' => $transactions,
+            'transactionsById' => $transactionsById,
+            'settings' => $plugin->getSettings(),
+            'hasApiKey' => $plugin->getAiInsights()->getApiKey() !== '',
+            'canGenerateInsights' => Craft::$app->getUser()->checkPermission(AiController::PERMISSION_GENERATE_INSIGHTS),
+            'previousOrders' => $plugin->getStats()->getPreviousOrderCount($element),
+            'savedInsights' => $savedInsight,
+            'structuredInsights' => $savedInsight !== null
+                ? $plugin->getAiInsights()->decodeStructuredInsights($savedInsight['message'] ?? null)
+                : null,
         ]);
     }
 
@@ -143,13 +199,14 @@ class OrderLifecycleField extends Field
      * @param string $message The note message.
      * @param string|null $modifier An optional blockquote modifier class (e.g. warning).
      * @return string The note HTML.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _note(string $message, ?string $modifier = null): string
     {
         $class = 'note' . ($modifier !== null ? ' ' . $modifier : '');
 
-        return '<div class="readable"><blockquote class="' . $class . '"><p>' . $message . '</p></blockquote></div>';
+        return '<div class="readable"><blockquote class="' . $class . '"><p>'
+            . Html::encode($message) . '</p></blockquote></div>';
     }
 }

@@ -1,27 +1,28 @@
-
 [![Stable Version](https://img.shields.io/packagist/v/johnhenry/craft-order-lifecycle?label=stable&style=for-the-badge)](https://packagist.org/packages/johnhenry/craft-order-lifecycle)
 [![Static Badge](https://img.shields.io/badge/BUY-plugin?style=for-the-badge&logo=craftcms&logoColor=white&logoSize=auto&label=Craft%20Plugin%20Store&labelColor=%23E5422B)](https://plugins.craftcms.com/order-lifecycle?craft5)
 
-<p align="center"><img width="120" height="120" alt="craft-order-lifecycle-plugin-icon" src="https://johnhenry.ie/images/plugins/craft-order-lifecycle.svg"></p>
+![Order Lifecycle for Craft Commerce](https://johnhenry.ie/images/plugins/promos/order-lifecycle/1.png)
 
-<h1 align="center">Order Lifecycle for Craft Commerce</h1>
+# Order Lifecycle for Craft Commerce
 
-Keeps track of every event in a Craft Commerce order's journey, from the first cart through to payment, refund and beyond, with a timeline view and analytics to go with it.
+When a customer rings about an order, open it and see every step it took: the cart, checkout, each payment attempt, the emails and any refund. Order Lifecycle records all of it on the order's own page for Craft Commerce, with store analytics and optional AI insights to go with it.
 
 ## Features
 
-- **Event tracking** – Records every stage of an order automatically: cart created, line items added or changed, coupons applied, addresses set, shipping method chosen, payments attempted, captured and refunded, emails sent or failed, and status changes
-- **Timeline view** – A clear, filterable timeline of the whole order journey on the order's own edit screen, with each event showing exactly what changed since the one before it
-- **Order snapshots** – Every event stores a full snapshot of the order at that moment, so you can see the state it was in when anything happened
-- **Store statistics** – Conversion rate, abandonment, average cart value, checkout and completion times, payment retries and email success, over the period you choose
-- **AI insights** – On-demand summaries of a single order or your whole store, written by Claude, calling out the anomalies and what's worth acting on (bring your own Anthropic API key)
-- **Dashboard widgets** – A stats widget and an AI insights widget for the Craft dashboard
-- **CSV export** – Export lifecycle events for a date range or specific orders, with your own choice of columns, for analysis in a spreadsheet or BI tool
-- **Order field** – A summary field showing an order's key conversion metrics at a glance
-- **Log maintenance** – Auto-prune old logs on a schedule, or purge them from the command line, so the table never runs away on you
-- **Native UI** – Fits right into the Craft control panel, keyboard and screen-reader friendly
+- **Automatic event tracking**: Records every stage of an order with no extra code: cart created, line items added or changed, coupons, addresses, customer, shipping method, status changes, payments attempted, authorised, captured and refunded, and order emails sent or failed
+- **Timeline view**: The whole order journey on the order's own edit screen, filterable by category, with what changed at each step and how long since the last one
+- **Order snapshots**: Every event keeps a snapshot of the order at that moment, a click away on the timeline
+- **Store statistics**: Conversion, cart abandonment, checkout and completion times, payment retries, returning customers, cart value and email delivery, on the Overview page and a dashboard widget
+- **Multi-store aware**: Stats, AI insights and exports follow the store you have picked in the control panel
+- **AI insights**: On-demand analysis from Claude of a single order or the whole store, pointing out friction, payment trouble and what's worth acting on. The customer's details are never sent (bring your own Anthropic API key)
+- **CSV export**: Export lifecycle events from the Export page, with your own choice of columns, dates, event types and order
+- **Configurable logging**: Switch each event category on or off from the control panel, and choose whether to record IP addresses and user IDs
+- **Privacy and retention**: IP collection is off by default, old logs can be pruned on a schedule, and one console command erases a customer's history when they ask
+- **Permissions**: Separate permissions for exporting and generating insights, on top of Commerce's own order access
+- **Developer API**: A Twig variable for recording when checkout starts, and PHP services for logging, reading, updating and deleting events from your own code
+- **Native UI**: Fits right into the Craft control panel, keyboard and screen-reader friendly
 
-## Perfect for
+## Perfect For
 
 - Tracking the full lifecycle of every Craft Commerce order
 - Diagnosing checkout friction, payment failures and cart abandonment
@@ -29,7 +30,7 @@ Keeps track of every event in a Craft Commerce order's journey, from the first c
 
 ## Documentation
 
-Full documentation is at [https://johnhenry.ie/plugins/order-lifecycle/](https://johnhenry.ie/plugins/order-lifecycle/)
+Full documentation is at [johnhenry.ie/plugins/order-lifecycle/docs](https://johnhenry.ie/plugins/order-lifecycle/docs/getting-started/overview).
 
 ## Requirements
 
@@ -37,13 +38,17 @@ Full documentation is at [https://johnhenry.ie/plugins/order-lifecycle/](https:/
 - Craft Commerce 5.0 or later
 - PHP 8.2 or later
 
+## Accessibility
+
+How accessible the plugin is, what's been checked, and how to report a problem are all in the [accessibility statement](https://github.com/john-henry/craft-order-lifecycle/blob/craft-5/ACCESSIBILITY.md).
+
 ## Support
 
-For support, drop by the [GitHub Issues page](https://github.com/john-henry/craft-order-lifecycle/issues).
+Need a hand? Open an issue on the [GitHub Issues page](https://github.com/john-henry/craft-order-lifecycle/issues).
 
 ## License
 
-Proprietary - Copyright (c) 2026 John Henry Donovan
+Proprietary. Copyright (c) 2026 John Henry Donovan.
 
 ---
 

@@ -2,12 +2,18 @@
 
 use craft\commerce\elements\Order;
 use craft\commerce\events\ProcessPaymentEvent;
+use craft\commerce\events\RefundTransactionEvent;
 use craft\commerce\models\Transaction;
+use craft\commerce\queue\jobs\SendEmail;
 use craft\commerce\records\Transaction as TransactionRecord;
 use craft\commerce\services\Payments;
+use craft\db\Query;
+use craft\helpers\Json;
+use craft\queue\Queue;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
 use yii\base\Event;
+use yii\queue\ExecEvent;
 
 // ---------------------------------------------------------------------------
 // EVENT_AFTER_PROCESS_PAYMENT: payment attempt / processed logging
@@ -159,5 +165,73 @@ describe('EVENT_AFTER_PROCESS_PAYMENT: terminal statuses', function () {
 
         expect(logCount($order->id, EventType::PAYMENT_ATTEMPT))->toBe(1)
             ->and(logCount($order->id, EventType::PAYMENT_PROCESSED))->toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Refunds, authorisations and failed email jobs
+// ---------------------------------------------------------------------------
+
+describe('refund, authorisation and email job logging', function () {
+    // Commerce fires the refund event for a refund the gateway declined too,
+    // so the refund transaction's own status decides what is logged.
+    it('logs a declined refund as failed', function () {
+        $order = orderWithSnapshot();
+
+        $charge = new Transaction(['id' => 1, 'orderId' => $order->id, 'status' => TransactionRecord::STATUS_SUCCESS, 'type' => 'purchase']);
+        $refund = new Transaction([
+            'orderId' => $order->id,
+            'status' => TransactionRecord::STATUS_FAILED,
+            'type' => 'refund',
+            'paymentAmount' => 5.00,
+            'paymentCurrency' => 'EUR',
+        ]);
+
+        Event::trigger(Payments::class, Payments::EVENT_AFTER_REFUND_TRANSACTION, new RefundTransactionEvent([
+            'transaction' => $charge,
+            'refundTransaction' => $refund,
+            'amount' => 5.00,
+        ]));
+
+        $row = (new Query())
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['orderId' => $order->id, 'type' => EventType::PAYMENT_REFUNDED->value])
+            ->one();
+        $snapshot = Json::decode($row['snapshot']);
+
+        expect($snapshot['payload']['success'])->toBeFalse()
+            ->and($snapshot['payload']['parentId'])->toBe(1)
+            ->and($row['message'])->toContain('failed');
+    });
+
+    it('logs the authorised total when an order is authorised', function () {
+        $order = orderWithSnapshot();
+
+        $order->trigger(Order::EVENT_AFTER_ORDER_AUTHORIZED);
+
+        $row = (new Query())
+            ->from('{{%orderlifecycle_logs}}')
+            ->where(['orderId' => $order->id, 'type' => EventType::PAYMENT_AUTHORIZED->value])
+            ->one();
+        $snapshot = Json::decode($row['snapshot']);
+
+        expect($snapshot['payload'])->toHaveKey('totalAuthorized')
+            ->and($snapshot['payload']['currency'])->toBe($order->currency);
+    });
+
+    it('logs a failed Commerce email job against its order', function () {
+        $order = orderWithSnapshot();
+
+        Event::trigger(Queue::class, Queue::EVENT_AFTER_ERROR, new ExecEvent([
+            'id' => '123',
+            'job' => new SendEmail([
+                'orderId' => $order->id,
+                'commerceEmailId' => 999999,
+            ]),
+            'attempt' => 1,
+            'error' => new RuntimeException('SMTP is down'),
+        ]));
+
+        expect(logCount($order->id, EventType::EMAIL_FAILED))->toBe(1);
     });
 });

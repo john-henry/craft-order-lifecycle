@@ -73,6 +73,9 @@ return [
         // Store the logged-in user ID alongside each event
         'collectUserId' => true,
 
+        // Write each event from a queue job instead of during the request
+        'asyncLogging' => false,
+
         // --- Display ---
 
         // Show the Order Lifecycle Stats dashboard widget

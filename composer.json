@@ -1,14 +1,21 @@
 {
   "name": "johnhenry/craft-order-lifecycle",
-  "description": "A full event timeline, store analytics and AI insights for every Craft Commerce order.",
+  "description": "A timeline of every step each Craft Commerce order took, with store analytics and optional AI insights.",
   "type": "craft-plugin",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "keywords": [
-    "craft",
-    "cms",
-    "craftcms",
     "craft-commerce",
-    "craft-plugin"
+    "order history",
+    "order timeline",
+    "audit log",
+    "abandoned carts",
+    "cart abandonment",
+    "checkout analytics",
+    "conversion rate",
+    "failed payments",
+    "refunds",
+    "customer support",
+    "order export"
   ],
   "license": "proprietary",
   "authors": [
@@ -25,7 +32,8 @@
   },
   "require-dev": {
     "craftcms/ecs": "dev-main",
-    "craftcms/phpstan": "dev-main"
+    "craftcms/phpstan": "dev-main",
+    "phpstan/phpstan": "^2.2"
   },
   "autoload": {
     "psr-4": {

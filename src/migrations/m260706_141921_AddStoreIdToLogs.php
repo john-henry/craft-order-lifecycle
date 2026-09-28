@@ -20,7 +20,7 @@ use craft\db\Query;
  * it silently loses the association if the underlying order is ever hard-deleted.
  * A direct, indexed column fixes both.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.1
  */
 class m260706_141921_AddStoreIdToLogs extends Migration
@@ -33,7 +33,7 @@ class m260706_141921_AddStoreIdToLogs extends Migration
      * @inheritdoc
      *
      * @return bool Whether the migration applied successfully.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.1
      */
     public function safeUp(): bool
@@ -65,7 +65,7 @@ class m260706_141921_AddStoreIdToLogs extends Migration
      * @inheritdoc
      *
      * @return bool Whether the migration reverted successfully.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.1
      */
     public function safeDown(): bool
@@ -91,7 +91,7 @@ class m260706_141921_AddStoreIdToLogs extends Migration
      * clears those out regardless on its next run.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.1
      */
     private function _backfillStoreIds(): void

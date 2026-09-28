@@ -158,7 +158,9 @@ describe('StatsService::getStats() with log data', function () {
 // ---------------------------------------------------------------------------
 
 describe('StatsService orphaned log cleanup', function () {
-    it('removes logs when the order is deleted', function () {
+    // Deleting for good, not trashing. A trashed order is restorable and keeps
+    // its timeline, which TrashedOrderLogsTest covers.
+    it('removes logs when the order is deleted for good', function () {
         $order = makeOrder();
         $logger = OrderLifecycle::$plugin->getLogger();
         $logger->log($order, EventType::CART_CREATED);
@@ -166,7 +168,7 @@ describe('StatsService orphaned log cleanup', function () {
 
         expect(logExists($orderId, EventType::CART_CREATED))->toBeTrue();
 
-        Craft::$app->getElements()->deleteElement($order);
+        Craft::$app->getElements()->deleteElement($order, true);
 
         expect(logExists($orderId, EventType::CART_CREATED))->toBeFalse();
     });

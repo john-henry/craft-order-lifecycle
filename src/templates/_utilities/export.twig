@@ -1,12 +1,16 @@
 {% import '_includes/forms.twig' as forms %}
 {% do view.registerAssetBundle('johnhenry\\orderlifecycle\\assets\\OrderLifecycleAsset') %}
 
-   
+{% set columnMoveItems = [
+   { icon: 'arrow-up', label: 'Move up'|t('app'), attributes: { data: { action: 'moveUp' } } },
+   { icon: 'arrow-down', label: 'Move down'|t('app'), attributes: { data: { action: 'moveDown' } } },
+] %}
+
    <p>{{ 'Export order lifecycle events as CSV for analysis in BI tools, spreadsheets, or data warehouses.'|t('order-lifecycle') }}</p>
-   
+
    <form id="ol-export-form" method="post" action="{{ actionUrl('order-lifecycle/export/csv') }}" target="_blank">
 	  {{ csrfInput() }}
-	  
+
 	  <div class="field">
 		 <div class="heading">
 			<label>{{ 'Date Range Presets'|t('order-lifecycle') }}</label>
@@ -31,7 +35,7 @@
 			</div>
 		 </div>
 	  </div>
-	  
+
 	  {{ forms.dateTimeField({
 		 label: 'Date From'|t('order-lifecycle'),
 		 id: 'dateFrom',
@@ -102,8 +106,17 @@
 			   </thead>
 			   <tbody id="exportColumnsList">
 			   <tr data-column="id">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 1})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -118,8 +131,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="dateCreated">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 2})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -134,8 +156,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="orderId">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 3})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -150,8 +181,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="orderNumber">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 4})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -166,8 +206,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="type">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 5})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -182,8 +231,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="message">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 6})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -198,8 +256,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="email">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 7})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -214,8 +281,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="orderStatus">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 8})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -230,8 +306,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="totalPrice">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 9})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -246,8 +331,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="currency">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 10})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -262,8 +356,17 @@
 				  </td>
 			   </tr>
 			   <tr data-column="payload">
-				  <td class="thin">
-					 <a class="move icon" title="Reorder"></a>
+				  <td class="thin action">
+					 <div class="flex flex-nowrap">
+						<a class="move icon" title="{{ 'Reorder'|t('app') }}" aria-hidden="true"></a>
+						{{ disclosureMenu(columnMoveItems, {
+						   buttonAttributes: {
+							  'aria-label': "#{'Row {index}'|t('app', {index: 11})} #{'Actions'|t('app')}",
+							  class: ['action-btn'],
+							  title: 'Actions'|t('app'),
+						   },
+						}) }}
+					 </div>
 				  </td>
 				  <td>
 					 {{ forms.lightswitchField({
@@ -282,7 +385,7 @@
 		 </div>
 	  </div>
 	  <hr>
-	  
+
 	  <div class="field">
 		 <div class="buttons">
 			<button type="submit" id="ol-export-submit" class="btn submit">

@@ -32,10 +32,10 @@ describe('SettingsModel defaults', function () {
             ->and($settings->asyncLogging)->toBeFalse();
     });
 
-    it('ships with data-collection enabled by default', function () {
+    it('ships with IP collection off and user collection on by default', function () {
         $settings = new SettingsModel();
 
-        expect($settings->collectUserIp)->toBeTrue()
+        expect($settings->collectUserIp)->toBeFalse()
             ->and($settings->collectUserId)->toBeTrue();
     });
 

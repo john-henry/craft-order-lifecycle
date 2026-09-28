@@ -14,7 +14,7 @@ use Craft;
  * Backed string enum identifying every kind of lifecycle event that the plugin
  * can record, with helpers for human-readable labels and category grouping.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 enum EventType : string
@@ -80,7 +80,7 @@ enum EventType : string
      * Returns the human-readable, translated label for this event type.
      *
      * @return string The translated label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getLabel(): string
@@ -120,7 +120,7 @@ enum EventType : string
      * Returns the category grouping for this event type.
      *
      * @return string The category handle (e.g. cart, payment, email).
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getCategory(): string
@@ -165,7 +165,7 @@ enum EventType : string
      *
      * @return string The filter pill handle (cart, lineItems, coupons, addresses,
      *     customer, shipping, order, payment, email, or ai).
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getFilterPill(): string
@@ -179,7 +179,7 @@ enum EventType : string
      * Returns whether this is a cart-related event.
      *
      * @return bool True if this event belongs to the cart category.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isCartEvent(): bool
@@ -191,7 +191,7 @@ enum EventType : string
      * Returns whether this is a payment-related event.
      *
      * @return bool True if this event belongs to the payment category.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isPaymentEvent(): bool
@@ -203,7 +203,7 @@ enum EventType : string
      * Returns whether this is an email-related event.
      *
      * @return bool True if this event belongs to the email category.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isEmailEvent(): bool

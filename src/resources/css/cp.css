@@ -855,6 +855,8 @@
 }
 
 .lifecycle-analysis-item-title {
+    display: block;
+    margin-bottom: 2px;
     font-weight: 600;
     color: var(--dark-text-color);
 }

@@ -13,7 +13,7 @@
     <div class="btngroup">
         {% for d in [7, 14, 30, 60, 90] %}
             <button type="submit" name="days" value="{{ d }}" class="btn{% if days == d %} active{% endif %}">
-                {{ d ~ ' ' ~ 'days'|t('order-lifecycle') }}
+                {{ '{days} days'|t('order-lifecycle', { days: d }) }}
             </button>
         {% endfor %}
         <button type="submit" name="days" value="0" class="btn{% if days == 0 %} active{% endif %}">
@@ -26,7 +26,6 @@
 {% block content %}
 <div class="order-lifecycle-dashboard">
 
-    {# ── Alert banners ─────────────────────────────────────────────────────── #}
     {% set alerts = [] %}
 
     {% if stats.uniqueOrders == 0 and stats.days > 0 %}
@@ -65,14 +64,13 @@
         <div class="ol-alerts">
             {% for alert in alerts %}
                 <div class="ol-alert ol-alert-{{ alert.level }}">
-                    <span class="ol-alert-icon">{{ alert.icon }}</span>
+                    <span class="ol-alert-icon" aria-hidden="true">{{ alert.icon }}</span>
                     <span>{{ alert.message }}</span>
                 </div>
             {% endfor %}
         </div>
     {% endif %}
 
-    {# ── Stat grid ─────────────────────────────────────────────────────────── #}
     {% include 'order-lifecycle/_includes/stat-grid' with {
         stats: stats,
         showAllTimeNote: true,

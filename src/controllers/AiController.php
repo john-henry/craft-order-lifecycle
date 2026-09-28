@@ -12,7 +12,7 @@ use craft\commerce\Plugin as Commerce;
 use craft\web\Controller;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
-use JsonException;
+use Throwable;
 use yii\base\InvalidConfigException;
 use yii\db\Exception;
 use yii\web\BadRequestHttpException;
@@ -25,13 +25,39 @@ use yii\web\Response;
  *
  * Thin controller for the on-demand Claude AI insight requests. Delegates stats
  * aggregation to StatsService and prompt building, the Anthropic call and result
- * persistence to AiInsightsService; store-wide generation runs on the queue.
+ * persistence to AiInsightsService. Both actions run inline, so neither needs a
+ * queue worker to be running.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class AiController extends Controller
 {
+    // =========================================================================
+    // Traits
+    // =========================================================================
+
+    use AiRateLimitTrait;
+
+    // =========================================================================
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * @var string The permission to generate AI insights.
+     */
+    public const PERMISSION_GENERATE_INSIGHTS = 'order-lifecycle:generate-insights';
+
+    /**
+     * @var int The most AI requests one user may make in a window.
+     */
+    public const AI_RATE_LIMIT = 20;
+
+    /**
+     * @var int The length of the rolling rate-limit window, in seconds.
+     */
+    public const AI_RATE_WINDOW = 60;
+
     // =========================================================================
     // Protected Properties
     // =========================================================================
@@ -55,15 +81,21 @@ class AiController extends Controller
      * @throws \yii\base\Exception If the order context cannot be built.
      * @throws BadRequestHttpException If the required order ID is missing.
      * @throws ForbiddenHttpException If the user lacks the required permission.
-     * @throws JsonException If the order context cannot be decoded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionInsights(): Response
     {
         $this->requirePostRequest();
         $this->requireAcceptsJson();
-        $this->requirePermission('order-lifecycle:generateInsights');
+        $this->requirePermission(self::PERMISSION_GENERATE_INSIGHTS);
+
+        if ($this->aiRateLimitExceeded('order-insights', self::AI_RATE_LIMIT, self::AI_RATE_WINDOW)) {
+            return $this->asJson([
+                'success' => false,
+                'error' => Craft::t('order-lifecycle', 'Too many insight requests, please wait a moment.'),
+            ]);
+        }
 
         $orderId = (int)$this->request->getRequiredBodyParam('orderId');
 
@@ -77,31 +109,34 @@ class AiController extends Controller
             ]);
         }
 
-        $logger = OrderLifecycle::getInstance()->getLogger();
-        $logs = $logger->getLogsForOrder($orderId);
-
-        if (empty($logs)) {
-            return $this->asJson([
-                'success' => false,
-                'error' => Craft::t('order-lifecycle', 'No lifecycle data available for this order.'),
-            ]);
-        }
-
+        // Being allowed to generate insights is not the same as being allowed
+        // to read this order: the ID comes straight off the request. Checked
+        // before anything is read, so the answer doesn't give away which
+        // orders have a history either.
         $order = Commerce::getInstance()->getOrders()->getOrderById($orderId);
 
-        if (!$order) {
+        if (!$order || !Craft::$app->getElements()->canView($order)) {
             return $this->asJson([
                 'success' => false,
                 'error' => Craft::t('order-lifecycle', 'Order not found.'),
             ]);
         }
 
-        $context = $this->_buildOrderContext($logs);
+        $logger = OrderLifecycle::getInstance()->getLogger();
+        $context = $ai->buildOrderContext($logger->getLogsForOrder($orderId));
+
+        if ($context['events'] === []) {
+            return $this->asJson([
+                'success' => false,
+                'error' => Craft::t('order-lifecycle', 'No lifecycle data available for this order.'),
+            ]);
+        }
+
         $prompt = $ai->buildOrderPrompt($context);
 
         try {
             $insights = $ai->generateInsights($apiKey, $prompt);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Craft::error('Order Lifecycle AI insights error: ' . $e->getMessage(), 'order-lifecycle');
 
             return $this->asJson([
@@ -131,14 +166,21 @@ class AiController extends Controller
      * @throws BadRequestHttpException If the request does not accept a JSON response.
      * @throws ForbiddenHttpException If the user lacks the required permission.
      * @throws InvalidConfigException If a required component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionStoreInsights(): Response
     {
         $this->requirePostRequest();
         $this->requireAcceptsJson();
-        $this->requirePermission('order-lifecycle:generateInsights');
+        $this->requirePermission(self::PERMISSION_GENERATE_INSIGHTS);
+
+        if ($this->aiRateLimitExceeded('store-insights', self::AI_RATE_LIMIT, self::AI_RATE_WINDOW)) {
+            return $this->asJson([
+                'success' => false,
+                'error' => Craft::t('order-lifecycle', 'Too many insight requests, please wait a moment.'),
+            ]);
+        }
 
         $days = (int)$this->request->getBodyParam('days', 30);
         $days = max(0, min(365, $days)); // 0 = all time
@@ -154,13 +196,13 @@ class AiController extends Controller
         }
 
         $context = $ai->truncateContext((string)$this->request->getBodyParam('context', ''));
-        $storeId = Commerce::getInstance()?->getStores()->getCurrentStore()->id;
+        $storeId = OrderLifecycle::getInstance()->getStats()->resolveStoreId();
 
         try {
             $stats = OrderLifecycle::getInstance()->getStats()->getStoreInsightStats($days, $storeId);
             $prompt = $ai->buildStorePrompt($stats, $days, $context);
             $insights = $ai->generateInsights($apiKey, $prompt);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Craft::error('Order Lifecycle store insights error: ' . $e->getMessage(), 'order-lifecycle');
 
             return $this->asJson([
@@ -195,7 +237,7 @@ class AiController extends Controller
      *
      * @param Order $order The order to summarise.
      * @return string The rendered summary line.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _buildOrderSummary(Order $order): string
@@ -206,7 +248,7 @@ class AiController extends Controller
 
         $statusLabel = $order->isCompleted
             ? Craft::t('order-lifecycle', 'Completed')
-            : ($order->getOrderStatus()?->name ?? Craft::t('order-lifecycle', 'Pending'));
+            : ($order->getOrderStatus()->name ?? Craft::t('order-lifecycle', 'Pending'));
 
         $segments = [
             Craft::t('order-lifecycle', 'Order #{reference}', ['reference' => $order->reference ?? $order->id]),
@@ -216,88 +258,5 @@ class AiController extends Controller
         ];
 
         return implode(' | ', $segments);
-    }
-
-    /**
-     * Builds the structured order context used to render the per-order prompt.
-     *
-     * @param array $logs The lifecycle logs for the order, newest first.
-     * @return array The structured order context (order, customer, events, metrics).
-     * @throws JsonException If a log snapshot cannot be decoded.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _buildOrderContext(array $logs): array
-    {
-        $lastLog = $logs[0];
-        $firstLog = end($logs);
-
-        $lastSnapshot = json_decode($lastLog['snapshot'] ?? '{}', true, 512, JSON_THROW_ON_ERROR) ?? [];
-
-        $events = [];
-        foreach (array_reverse($logs) as $log) {
-            $events[] = [
-                'type' => $log['type'],
-                'message' => $log['message'] ?? '',
-                'date' => $log['dateCreated'],
-            ];
-        }
-
-        $firstTime = strtotime($firstLog['dateCreated']);
-        $lastTime = strtotime($lastLog['dateCreated']);
-        $totalDurationMinutes = ($firstTime && $lastTime) ? (int)round(($lastTime - $firstTime) / 60) : null;
-
-        return [
-            'order' => $lastSnapshot['order'] ?? [],
-            'customer' => $lastSnapshot['customer'] ?? [],
-            'events' => $events,
-            'metrics' => [
-                'totalEvents' => count($logs),
-                'totalDurationMinutes' => $totalDurationMinutes,
-                'paymentAttempts' => $this->_countType($logs, ['paymentAttempt']),
-                'paymentFailed' => $this->_countPaymentFailures($logs),
-                'emailFailures' => $this->_countType($logs, ['emailFailed']),
-                'statusChanges' => $this->_countType($logs, ['statusChanged']),
-                'lineItemChanges' => $this->_countType($logs, ['lineItemAdded', 'lineItemRemoved', 'lineItemUpdated']),
-                'addressChanges' => $this->_countType($logs, ['shippingAddressSet', 'billingAddressSet', 'shippingAddressRemoved', 'billingAddressRemoved']),
-                'shippingChanges' => $this->_countType($logs, ['shippingMethodSet']),
-            ],
-        ];
-    }
-
-    /**
-     * Counts logs whose type is one of the supplied handles.
-     *
-     * @param array $logs The lifecycle logs.
-     * @param string[] $types The event type handles to count.
-     * @return int The number of matching logs.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _countType(array $logs, array $types): int
-    {
-        return count(array_filter($logs, static fn($l) => in_array($l['type'], $types, true)));
-    }
-
-    /**
-     * Counts failed payment-processed logs.
-     *
-     * @param array $logs The lifecycle logs.
-     * @return int The number of failed payment attempts.
-     * @throws JsonException If a snapshot cannot be decoded.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _countPaymentFailures(array $logs): int
-    {
-        return count(array_filter($logs, static function($l) {
-            if ($l['type'] !== 'paymentProcessed') {
-                return false;
-            }
-
-            $snapshot = json_decode($l['snapshot'] ?? '{}', true, 512, JSON_THROW_ON_ERROR);
-
-            return ($snapshot['payload']['success'] ?? true) === false;
-        }));
     }
 }

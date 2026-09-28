@@ -15,7 +15,7 @@ use yii\base\InvalidConfigException;
  * @property-read ExportService $export
  * @property-read OrderLifecycleLogger $logger
  * @property-read StatsService $stats
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 trait ServicesTrait
@@ -28,7 +28,7 @@ trait ServicesTrait
      * @inheritdoc
      *
      * @return array The plugin configuration, including registered service components.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function config(): array
@@ -52,7 +52,7 @@ trait ServicesTrait
      *
      * @return AiInsightsService The AI insights service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getAiInsights(): AiInsightsService
@@ -68,7 +68,7 @@ trait ServicesTrait
      *
      * @return ExportService The export service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getExport(): ExportService
@@ -84,7 +84,7 @@ trait ServicesTrait
      *
      * @return OrderLifecycleLogger The logger service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getLogger(): OrderLifecycleLogger
@@ -100,7 +100,7 @@ trait ServicesTrait
      *
      * @return StatsService The stats service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getStats(): StatsService

@@ -26,8 +26,6 @@ use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\Console;
-use craft\helpers\DateTimeHelper;
-use craft\helpers\Db;
 use craft\queue\Queue;
 use craft\services\Dashboard;
 use craft\services\Fields;
@@ -35,9 +33,11 @@ use craft\services\Gc;
 use craft\services\UserPermissions;
 use craft\web\twig\variables\CraftVariable;
 use craft\web\UrlManager;
-use Exception;
+use johnhenry\orderlifecycle\controllers\AiController;
+use johnhenry\orderlifecycle\controllers\ExportController;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\fields\OrderLifecycleField;
+use johnhenry\orderlifecycle\jobs\PruneLogs;
 use johnhenry\orderlifecycle\models\SettingsModel;
 use johnhenry\orderlifecycle\OrderLifecycle;
 use johnhenry\orderlifecycle\services\OrderLifecycleLogger;
@@ -48,6 +48,7 @@ use Throwable;
 use yii\base\Application;
 use yii\base\Event;
 use yii\base\InvalidConfigException;
+use yii\db\Exception as DbException;
 use yii\queue\ExecEvent;
 use yii\queue\Queue as QueueAlias;
 
@@ -58,7 +59,7 @@ use yii\queue\Queue as QueueAlias;
  * wire Commerce/Craft events to logger service methods and never implement
  * domain logic inline.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 trait PluginTrait
@@ -71,7 +72,7 @@ trait PluginTrait
      * @inheritdoc
      *
      * @return array|null The CP nav item definition, or null if unavailable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getCpNavItem(): ?array
@@ -88,11 +89,11 @@ trait PluginTrait
             $subnav['overview'] = ['label' => Craft::t('order-lifecycle', 'Overview'), 'url' => 'order-lifecycle'];
         }
 
-        if (OrderLifecycle::$plugin->settings->getAnthropicApiKey() && $user->checkPermission('order-lifecycle:generateInsights')) {
+        if (OrderLifecycle::$plugin->getSettings()->getAnthropicApiKey() && $user->checkPermission(AiController::PERMISSION_GENERATE_INSIGHTS)) {
             $subnav['insights'] = ['label' => Craft::t('order-lifecycle', 'AI Insights'), 'url' => 'order-lifecycle/insights'];
         }
 
-        if ($user->checkPermission('order-lifecycle:exportEvents')) {
+        if ($user->checkPermission(ExportController::PERMISSION_EXPORT_EVENTS) && $user->checkPermission('commerce-manageOrders')) {
             $subnav['export'] = ['label' => Craft::t('order-lifecycle', 'Export'), 'url' => 'order-lifecycle/export'];
         }
 
@@ -105,6 +106,21 @@ trait PluginTrait
         return $item;
     }
 
+    /**
+     * The plugin settings, typed.
+     *
+     * @return SettingsModel The plugin settings model.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    public function getSettings(): SettingsModel
+    {
+        $settings = parent::getSettings();
+        assert($settings instanceof SettingsModel);
+
+        return $settings;
+    }
+
     // =========================================================================
     // Protected Methods
     // =========================================================================
@@ -113,7 +129,7 @@ trait PluginTrait
      * @inheritdoc
      *
      * @return SettingsModel The plugin settings model.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function createSettingsModel(): SettingsModel
@@ -129,7 +145,7 @@ trait PluginTrait
      * Registers the plugin's field types.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerFieldTypes(): void
@@ -147,7 +163,7 @@ trait PluginTrait
      * Registers the Twig variable for use in templates.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerTwigVariable(): void
@@ -167,7 +183,7 @@ trait PluginTrait
      * Registers plugin permissions.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerPermissions(): void
@@ -179,10 +195,10 @@ trait PluginTrait
                 $event->permissions[] = [
                     'heading' => Craft::t('order-lifecycle', 'Order Lifecycle'),
                     'permissions' => [
-                        'order-lifecycle:exportEvents' => [
+                        ExportController::PERMISSION_EXPORT_EVENTS => [
                             'label' => Craft::t('order-lifecycle', 'Export lifecycle events'),
                         ],
-                        'order-lifecycle:generateInsights' => [
+                        AiController::PERMISSION_GENERATE_INSIGHTS => [
                             'label' => Craft::t('order-lifecycle', 'Generate AI insights'),
                         ],
                     ],
@@ -195,7 +211,7 @@ trait PluginTrait
      * Registers the Control Panel URL rules.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerCpUrlRules(): void
@@ -223,7 +239,7 @@ trait PluginTrait
      * Registers the plugin's dashboard widgets.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerWidgets(): void
@@ -246,7 +262,7 @@ trait PluginTrait
      *
      * @return void
      * @throws InvalidConfigException If the logger component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerListeners(): void
@@ -271,6 +287,16 @@ trait PluginTrait
         if ($settings->logEmailSent) {
             $this->_registerEmailListeners($logger);
         }
+
+        // A queue worker lives for many jobs, and the logger's per-request
+        // memory of each order's latest snapshot would otherwise outlive the
+        // job that filled it, grow without end, and be preferred over rows
+        // written since by other processes.
+        foreach ([QueueAlias::EVENT_AFTER_EXEC, QueueAlias::EVENT_AFTER_ERROR] as $queueEvent) {
+            Event::on(Queue::class, $queueEvent, static function() use ($logger) {
+                $logger->clearSnapshotCache();
+            });
+        }
     }
 
     /**
@@ -278,20 +304,40 @@ trait PluginTrait
      *
      * @param OrderLifecycleLogger $logger The logger service.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerOrderSaveListeners(OrderLifecycleLogger $logger): void
     {
-        // Remove logs when an order is deleted so they don't skew stats.
+        // A trashed order keeps its timeline: the event fires for a soft
+        // delete as well as a hard one, and dateDeleted is set on the model
+        // either way, so hardDelete is the only thing that tells them apart.
+        // Restoring an order has to bring its history back with it. The
+        // orderId foreign key already cascades on a real delete; this stands
+        // in for it on an install where that key has gone missing.
         Event::on(Order::class, Element::EVENT_AFTER_DELETE, static function($e) use ($logger) {
             self::_logSafely(static function() use ($logger, $e) {
                 /** @var Order $order */
                 $order = $e->sender;
-                if ($order->id) {
+                if ($order->id && $order->hardDelete) {
                     $logger->deleteLogsForOrder((int)$order->id);
                 }
             });
+        });
+
+        // Notes the order's state before Commerce fires line-item and status
+        // events from inside the save, so the changes found afterwards are
+        // compared against the order as it was, not as those events left it.
+        // Bulk resaves and propagation change nothing a shopper or merchant
+        // did, so they log nothing.
+        Event::on(Order::class, Element::EVENT_BEFORE_SAVE, static function($e) use ($logger) {
+            /** @var Order $order */
+            $order = $e->sender;
+            if ($order->resaving || $order->propagating) {
+                return;
+            }
+
+            self::_logSafely(static fn() => $logger->beginOrderSave($order));
         });
 
         // Cart created/updated + granular change detection. Fires from
@@ -299,9 +345,13 @@ trait PluginTrait
         // try/catch on a successful charge, so a logging failure here must be
         // contained (see _logSafely()) or it would report the payment as failed.
         Event::on(Order::class, Element::EVENT_AFTER_SAVE, static function($e) use ($logger) {
-            self::_logSafely(static function() use ($logger, $e) {
-                /** @var Order $order */
-                $order = $e->sender;
+            /** @var Order $order */
+            $order = $e->sender;
+            if ($order->resaving || $order->propagating) {
+                return;
+            }
+
+            self::_logSafely(static function() use ($logger, $e, $order) {
                 $logger->logOrderSaveChanges($order, (bool)$e->isNew);
             });
         });
@@ -312,16 +362,21 @@ trait PluginTrait
      *
      * @param OrderLifecycleLogger $logger The logger service.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerLineItemListeners(OrderLifecycleLogger $logger): void
     {
+        // The order being saved fires these, so it is the sender: asking the
+        // line item for its order would load a fresh copy part way through
+        // the save, missing whatever else the save is changing.
         Event::on(Order::class, Order::EVENT_AFTER_APPLY_ADD_LINE_ITEM,
             static function(LineItemEvent $e) use ($logger) {
                 self::_logSafely(static function() use ($logger, $e) {
                     $li = $e->lineItem;
-                    $logger->log($li->getOrder(), EventType::LINE_ITEM_ADDED, [
+                    /** @var Order $order */
+                    $order = $e->sender;
+                    $logger->log($order, EventType::LINE_ITEM_ADDED, [
                         'sku' => $li->sku, 'qty' => $li->qty, 'subtotal' => $li->getSubtotal(),
                     ]);
                 });
@@ -332,7 +387,9 @@ trait PluginTrait
             static function(LineItemEvent $e) use ($logger) {
                 self::_logSafely(static function() use ($logger, $e) {
                     $li = $e->lineItem;
-                    $logger->log($li->getOrder(), EventType::LINE_ITEM_REMOVED, [
+                    /** @var Order $order */
+                    $order = $e->sender;
+                    $logger->log($order, EventType::LINE_ITEM_REMOVED, [
                         'sku' => $li->sku, 'qty' => $li->qty,
                     ]);
                 });
@@ -345,7 +402,7 @@ trait PluginTrait
      *
      * @param OrderLifecycleLogger $logger The logger service.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerStatusListener(OrderLifecycleLogger $logger): void
@@ -369,7 +426,7 @@ trait PluginTrait
      * @param OrderLifecycleLogger $logger The logger service.
      * @param SettingsModel $settings The plugin settings.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerCompletionListeners(OrderLifecycleLogger $logger, SettingsModel $settings): void
@@ -412,7 +469,8 @@ trait PluginTrait
                         /** @var Order $order */
                         $order = $e->sender;
                         $logger->log($order, EventType::PAYMENT_AUTHORIZED, [
-                            'totalAuthorized' => $order->getTotalPaid(),
+                            'totalAuthorized' => $order->getTotalAuthorized(),
+                            'currency' => $order->currency,
                         ]);
                     });
                 }
@@ -426,7 +484,7 @@ trait PluginTrait
      * @param OrderLifecycleLogger $logger The logger service.
      * @param SettingsModel $settings The plugin settings.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerPaymentListeners(OrderLifecycleLogger $logger, SettingsModel $settings): void
@@ -474,11 +532,18 @@ trait PluginTrait
         if ($settings->logPaymentCaptured) {
             Event::on(Payments::class, Payments::EVENT_AFTER_CAPTURE_TRANSACTION,
                 static function(TransactionEvent $e) use ($logger) {
+                    // $e->transaction is the capture Commerce just made, which
+                    // comes back failed when the gateway turns it down.
                     self::_logSafely(static function() use ($logger, $e) {
-                        $logger->log($e->transaction->getOrder(), EventType::PAYMENT_CAPTURED, [
-                            'transactionId' => $e->transaction->id,
-                            'type' => $e->transaction->type,
-                            'amount' => $e->transaction->amount,
+                        $capture = $e->transaction;
+                        $logger->log($capture->getOrder(), EventType::PAYMENT_CAPTURED, [
+                            'transactionId' => $capture->id,
+                            'type' => $capture->type,
+                            'status' => $capture->status,
+                            'success' => $capture->status === TransactionRecord::STATUS_SUCCESS,
+                            'amount' => $capture->paymentAmount,
+                            'currency' => $capture->paymentCurrency,
+                            'gatewayName' => $capture->getGateway()?->name,
                         ]);
                     });
                 }
@@ -488,15 +553,20 @@ trait PluginTrait
         if ($settings->logPaymentRefunded) {
             Event::on(Payments::class, Payments::EVENT_AFTER_REFUND_TRANSACTION,
                 static function(RefundTransactionEvent $e) use ($logger) {
+                    // Commerce fires this for a refund the gateway declined or
+                    // that threw, too: the refund transaction says which.
                     self::_logSafely(static function() use ($logger, $e) {
+                        $refund = $e->refundTransaction;
                         $logger->log($e->transaction->getOrder(), EventType::PAYMENT_REFUNDED, [
-                            'transactionId' => $e->transaction->id,
-                            'parentId' => $e->transaction->parentId,
-                            'type' => $e->transaction->type,
-                            'amount' => $e->amount,
-                            'currency' => $e->transaction->currency,
-                            'gatewayName' => $e->transaction->getGateway()?->name,
-                            'note' => $e->refundTransaction->note,
+                            'transactionId' => $refund->id,
+                            'parentId' => $e->transaction->id,
+                            'type' => $refund->type,
+                            'status' => $refund->status,
+                            'success' => $refund->status === TransactionRecord::STATUS_SUCCESS,
+                            'amount' => $refund->paymentAmount,
+                            'currency' => $refund->paymentCurrency,
+                            'gatewayName' => $refund->getGateway()?->name,
+                            'note' => $refund->note,
                         ]);
                     });
                 }
@@ -537,7 +607,7 @@ trait PluginTrait
      *
      * @param callable $fn The logging work to run.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _logSafely(callable $fn): void
@@ -545,12 +615,25 @@ trait PluginTrait
         try {
             $fn();
         } catch (Throwable $e) {
-            // Include the class and stack trace: if logging fails systematically
-            // (logs table gone, cache/queue backend down) every timeline silently
-            // gains gaps, and this line is the only signal, so it has to carry
-            // enough to diagnose the cause rather than just "something failed".
+            // A deadlock has already rolled back the transaction the order was
+            // being saved in, so carrying on would report a save that didn't
+            // happen. It goes back to Commerce, which fails the save as it
+            // would for any other deadlock.
+            if (OrderLifecycleLogger::isDeadlock($e)) {
+                throw $e;
+            }
+
+            // A database error's message repeats the statement with its values
+            // filled in, which here is an order snapshot full of customer
+            // details, so only its error codes are logged. The class and stack
+            // trace stay: if logging fails systematically every timeline gains
+            // gaps and this line is the only signal.
+            $detail = $e instanceof DbException
+                ? 'SQLSTATE ' . ($e->errorInfo[0] ?? '?') . ' (' . ($e->errorInfo[1] ?? '?') . ')'
+                : $e->getMessage();
+
             Craft::error(
-                'Failed to log an order lifecycle event: ' . $e::class . ': ' . $e->getMessage()
+                'Failed to log an order lifecycle event: ' . $e::class . ': ' . $detail
                 . "\n" . $e->getTraceAsString(),
                 'order-lifecycle',
             );
@@ -562,7 +645,7 @@ trait PluginTrait
      *
      * @param OrderLifecycleLogger $logger The logger service.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerEmailListeners(OrderLifecycleLogger $logger): void
@@ -571,23 +654,9 @@ trait PluginTrait
         // logDeferred() instead of log() - building a full snapshot inline
         // eats into the job's time-to-reserve, and if it runs out Commerce
         // resends the email on retry. routed through _logSafely() too, so a
-        // logging failure here can never take the actual send down with it
-        Event::on(Emails::class, Emails::EVENT_BEFORE_SEND_MAIL,
-            static function(MailEvent $e) use ($logger) {
-                if ($e->isValid === false) {
-                    self::_logSafely(static function() use ($logger, $e) {
-                        $logger->logDeferred((int)$e->order->id, EventType::EMAIL_FAILED, [
-                            // craftEmail->name isn't populated by Commerce - use commerceEmail
-                            'name' => $e->commerceEmail->name ?? null,
-                            'subject' => $e->craftEmail->subject ?? null,
-                            'to' => $e->craftEmail->to ?? null,
-                            'reason' => 'Email sending was prevented (isValid = false)',
-                        ], 'Email sending was prevented');
-                    });
-                }
-            }
-        );
-
+        // logging failure here can never take the actual send down with it.
+        // A send another plugin stops before it goes (isValid = false) is a
+        // cancellation to Commerce, not a failure, so it isn't logged as one.
         Event::on(Emails::class, Emails::EVENT_AFTER_SEND_MAIL,
             static function(MailEvent $e) use ($logger) {
                 self::_logSafely(static function() use ($logger, $e) {
@@ -611,11 +680,11 @@ trait PluginTrait
                 }
 
                 self::_logSafely(static function() use ($logger, $e) {
+                    /** @var SendEmailJob $job */
+                    $job = $e->job;
                     $logger->logFailedEmailJob(
-                        $e->job->orderId ?? null,
-                        $e->job->emailId ?? null,
-                        $e->job->number ?? null,
-                        $e->job->reference ?? null,
+                        $job->orderId ?? null,
+                        $job->commerceEmailId ?? null,
                         $e->attempt,
                         $e->id ?? null,
                         $e->error,
@@ -630,9 +699,11 @@ trait PluginTrait
      *
      * Acts as a safety net alongside the EVENT_AFTER_DELETE listener - catches
      * anything that slipped through (bulk operations, direct DB changes, etc.).
+     * Craft can run garbage collection at the start of an ordinary web request,
+     * so there the sweep is handed to the queue; `craft gc` does it in place.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerGarbageCollection(): void
@@ -640,78 +711,65 @@ trait PluginTrait
         Event::on(Gc::class, Gc::EVENT_RUN, function(Event $e) {
             /** @var Gc $gc */
             $gc = $e->sender;
-            $verbose = !$gc->silent && Craft::$app instanceof ConsoleApplication;
+            $isConsole = Craft::$app instanceof ConsoleApplication;
+            $verbose = !$gc->silent && $isConsole;
 
-            if ($verbose) {
-                Console::stdout('    > deleting orphaned order lifecycle logs ... ');
-            }
+            try {
+                if (!$isConsole) {
+                    Craft::$app->getQueue()->push(new PruneLogs(['orphaned' => true]));
 
-            $this->getLogger()->deleteOrphanedLogs();
+                    return;
+                }
 
-            if ($verbose) {
-                Console::stdout("done\n", Console::FG_GREEN);
+                if ($verbose) {
+                    Console::stdout('    > deleting orphaned order lifecycle logs ... ');
+                }
+
+                $this->getLogger()->deleteOrphanedLogs();
+
+                if ($verbose) {
+                    Console::stdout("done\n", Console::FG_GREEN);
+                }
+            } catch (Throwable $exception) {
+                Craft::warning('Deleting orphaned order lifecycle logs failed: ' . $exception->getMessage(), 'order-lifecycle');
             }
         });
     }
 
     /**
-     * Sets up automatic log pruning on the after-request event.
+     * Queues the daily prune of old logs, when a retention period is set.
+     *
+     * Checked at the end of a request, but the deleting itself runs on the
+     * queue in batches, so it never holds up the request that noticed it.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _setupAutoPrune(): void
     {
-        /** @var SettingsModel $settings */
-        $settings = $this->getSettings();
+        $days = $this->getSettings()->autoPruneLogs;
 
-        if ($settings->autoPruneLogs <= 0) {
+        if ($days <= 0) {
             return;
         }
 
         Event::on(
             \craft\web\Application::class,
             Application::EVENT_AFTER_REQUEST,
-            function() use ($settings) {
-                $this->_maybeAutoPruneLogs($settings->autoPruneLogs);
+            static function() use ($days) {
+                // add() only succeeds for the first request to get here in a
+                // day, so the job is queued once however busy the site is
+                if (!Craft::$app->getCache()->add('orderlifecycle_last_auto_prune', time(), 86400)) {
+                    return;
+                }
+
+                try {
+                    Craft::$app->getQueue()->push(new PruneLogs(['days' => $days]));
+                } catch (Throwable $e) {
+                    Craft::warning('Queuing the order lifecycle log prune failed: ' . $e->getMessage(), 'order-lifecycle');
+                }
             }
         );
-    }
-
-    /**
-     * Auto-prunes logs if it has been more than a day since the last prune.
-     *
-     * @param int $days The age threshold in days; logs older than this are deleted.
-     * @return void
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _maybeAutoPruneLogs(int $days): void
-    {
-        $cacheKey = 'orderlifecycle_last_auto_prune';
-        $cache = Craft::$app->getCache();
-        $lastPrune = $cache->get($cacheKey);
-
-        // Only run once per day.
-        if ($lastPrune && (time() - $lastPrune) < 86400) {
-            return;
-        }
-
-        $cache->set($cacheKey, time(), 86400 * 2);
-
-        try {
-            $cutoffDate = DateTimeHelper::toDateTime('-' . $days . ' days');
-
-            $deleted = Craft::$app->getDb()->createCommand()
-                ->delete('{{%orderlifecycle_logs}}', ['<', 'dateCreated', Db::prepareDateForDb($cutoffDate)])
-                ->execute();
-
-            if ($deleted > 0) {
-                Craft::info("Auto-pruned $deleted log(s) older than $days days", __METHOD__);
-            }
-        } catch (Exception $e) {
-            Craft::warning('Auto-prune logs failed: ' . $e->getMessage(), __METHOD__);
-        }
     }
 }

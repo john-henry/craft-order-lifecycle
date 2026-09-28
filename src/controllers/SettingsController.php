@@ -20,7 +20,7 @@ use yii\web\Response;
  *
  * Renders and persists the plugin's settings screen.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class SettingsController extends Controller
@@ -43,14 +43,14 @@ class SettingsController extends Controller
      *
      * @return Response|null The rendered template response.
      * @throws ForbiddenHttpException If the user is not an admin.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionEdit(): ?Response
     {
         $this->requireAdmin();
 
-        $settings = OrderLifecycle::$plugin->settings;
+        $settings = OrderLifecycle::$plugin->getSettings();
 
         return $this->renderTemplate('order-lifecycle/_settings', [
             'settings' => $settings,
@@ -66,7 +66,7 @@ class SettingsController extends Controller
      * @throws BadRequestHttpException If the request is malformed.
      * @throws MethodNotAllowedHttpException If the request is not a POST request.
      * @throws ForbiddenHttpException If the user is not an admin.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSave(): ?Response
@@ -76,7 +76,7 @@ class SettingsController extends Controller
 
         $request = Craft::$app->getRequest();
 
-        $settings = OrderLifecycle::$plugin->settings;
+        $settings = OrderLifecycle::$plugin->getSettings();
 
         $settings->logLineItems = (bool)$request->getBodyParam('settings[logLineItems]', $settings->logLineItems);
         $settings->logStatusChanges = (bool)$request->getBodyParam('settings[logStatusChanges]', $settings->logStatusChanges);
@@ -114,7 +114,7 @@ class SettingsController extends Controller
             );
         }
 
-        if (!Craft::$app->getPlugins()->savePluginSettings(OrderLifecycle::$plugin, $settings->getAttributes())) {
+        if (!Craft::$app->getPlugins()->savePluginSettings(OrderLifecycle::$plugin, $this->_persistable($settings->getAttributes()))) {
             Craft::$app->getSession()->setError(Craft::t('order-lifecycle', 'Couldn\'t save plugin settings.'));
 
             return $this->asModelFailure(
@@ -129,5 +129,43 @@ class SettingsController extends Controller
         Craft::$app->getSession()->setSuccess($notice);
 
         return $this->redirectToPostedUrl();
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * The settings to write to project config, with anything the config file
+     * sets left as project config already has it.
+     *
+     * The settings model already carries `config/order-lifecycle.php`'s values
+     * by the time it is saved, and Craft writes whatever it is given. Without
+     * this, one save would copy a key resolved from the environment, or any
+     * other value meant to differ between environments, into the YAML.
+     *
+     * @param array $attributes The settings as the model holds them.
+     * @return array The settings to save.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.0
+     */
+    private function _persistable(array $attributes): array
+    {
+        $fromFile = Craft::$app->getConfig()->getConfigFromFile('order-lifecycle');
+        $stored = Craft::$app->getProjectConfig()->get('plugins.order-lifecycle.settings') ?? [];
+
+        foreach (array_keys($fromFile) as $key) {
+            if (!array_key_exists($key, $attributes)) {
+                continue;
+            }
+
+            if (array_key_exists($key, $stored)) {
+                $attributes[$key] = $stored[$key];
+            } else {
+                unset($attributes[$key]);
+            }
+        }
+
+        return $attributes;
     }
 }
