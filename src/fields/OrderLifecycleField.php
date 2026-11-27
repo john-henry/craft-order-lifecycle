@@ -17,6 +17,7 @@ use johnhenry\orderlifecycle\assets\OrderLifecycleAsset;
 use johnhenry\orderlifecycle\controllers\AiController;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
+use johnhenry\orderlifecycle\services\OrderLifecycleLogger;
 use Throwable;
 
 /**
@@ -172,6 +173,7 @@ class OrderLifecycleField extends Field
 
         return Craft::$app->getView()->renderTemplate('order-lifecycle/_field-input', [
             'order' => $element,
+            'isGuest' => OrderLifecycleLogger::isGuest($element),
             'logs' => $logs,
             'timeline' => $timeline,
             'field' => $this,

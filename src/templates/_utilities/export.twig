@@ -121,11 +121,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[id][checked]',
+						labelledBy: 'export-column-id',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Log ID'|t('order-lifecycle') }}
+					 <span id="export-column-id">{{ 'Log ID'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[id][label]" value="Log ID">
 					 <input type="hidden" name="exportColumns[id][order]" class="order-input" value="0">
 				  </td>
@@ -146,11 +147,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[dateCreated][checked]',
+						labelledBy: 'export-column-dateCreated',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Date/Time'|t('order-lifecycle') }}
+					 <span id="export-column-dateCreated">{{ 'Date/Time'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[dateCreated][label]" value="Date/Time">
 					 <input type="hidden" name="exportColumns[dateCreated][order]" class="order-input" value="1">
 				  </td>
@@ -171,11 +173,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[orderId][checked]',
+						labelledBy: 'export-column-orderId',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Order ID'|t('order-lifecycle') }}
+					 <span id="export-column-orderId">{{ 'Order ID'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[orderId][label]" value="Order ID">
 					 <input type="hidden" name="exportColumns[orderId][order]" class="order-input" value="2">
 				  </td>
@@ -196,11 +199,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[orderNumber][checked]',
+						labelledBy: 'export-column-orderNumber',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Order Number'|t('order-lifecycle') }}
+					 <span id="export-column-orderNumber">{{ 'Order Number'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[orderNumber][label]" value="Order Number">
 					 <input type="hidden" name="exportColumns[orderNumber][order]" class="order-input" value="3">
 				  </td>
@@ -221,11 +225,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[type][checked]',
+						labelledBy: 'export-column-type',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Event Type'|t('order-lifecycle') }}
+					 <span id="export-column-type">{{ 'Event Type'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[type][label]" value="Event Type">
 					 <input type="hidden" name="exportColumns[type][order]" class="order-input" value="4">
 				  </td>
@@ -246,11 +251,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[message][checked]',
+						labelledBy: 'export-column-message',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Message'|t('order-lifecycle') }}
+					 <span id="export-column-message">{{ 'Message'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[message][label]" value="Message">
 					 <input type="hidden" name="exportColumns[message][order]" class="order-input" value="5">
 				  </td>
@@ -271,11 +277,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[email][checked]',
+						labelledBy: 'export-column-email',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Customer Email'|t('order-lifecycle') }}
+					 <span id="export-column-email">{{ 'Customer Email'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[email][label]" value="Customer Email">
 					 <input type="hidden" name="exportColumns[email][order]" class="order-input" value="6">
 				  </td>
@@ -296,11 +303,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[orderStatus][checked]',
+						labelledBy: 'export-column-orderStatus',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Order Status'|t('order-lifecycle') }}
+					 <span id="export-column-orderStatus">{{ 'Order Status'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[orderStatus][label]" value="Order Status">
 					 <input type="hidden" name="exportColumns[orderStatus][order]" class="order-input" value="7">
 				  </td>
@@ -321,11 +329,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[totalPrice][checked]',
+						labelledBy: 'export-column-totalPrice',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Total Price'|t('order-lifecycle') }}
+					 <span id="export-column-totalPrice">{{ 'Total Price'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[totalPrice][label]" value="Total Price">
 					 <input type="hidden" name="exportColumns[totalPrice][order]" class="order-input" value="8">
 				  </td>
@@ -346,11 +355,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[currency][checked]',
+						labelledBy: 'export-column-currency',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Currency'|t('order-lifecycle') }}
+					 <span id="export-column-currency">{{ 'Currency'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[currency][label]" value="Currency">
 					 <input type="hidden" name="exportColumns[currency][order]" class="order-input" value="9">
 				  </td>
@@ -371,11 +381,12 @@
 				  <td>
 					 {{ forms.lightswitchField({
 						name: 'exportColumns[payload][checked]',
+						labelledBy: 'export-column-payload',
 						on: true,
 					 }) }}
 				  </td>
 				  <td>
-					 {{ 'Payload (JSON)'|t('order-lifecycle') }}
+					 <span id="export-column-payload">{{ 'Payload (JSON)'|t('order-lifecycle') }}</span>
 					 <input type="hidden" name="exportColumns[payload][label]" value="Payload (JSON)">
 					 <input type="hidden" name="exportColumns[payload][order]" class="order-input" value="10">
 				  </td>

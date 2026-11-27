@@ -67,8 +67,9 @@ return [
 
         // --- Data collection ---
 
-        // Store the IP address of the user who triggered each event
-        'collectUserIp' => true,
+        // Store the IP address of the user who triggered each event. Off by
+        // default: an IP address is personal data.
+        'collectUserIp' => false,
 
         // Store the logged-in user ID alongside each event
         'collectUserId' => true,
@@ -78,7 +79,8 @@ return [
 
         // --- Display ---
 
-        // Show the Order Lifecycle Stats dashboard widget
+        // Show the summary cards at the top of the Order Lifecycle field on each
+        // order. The dashboard widgets are added and removed on the dashboard.
         'showLifecycleStats' => true,
 
         // --- Log retention ---
@@ -92,14 +94,14 @@ return [
         // 'anthropicApiKey' => '$ANTHROPIC_API_KEY',
 
         // Presentation style for per-order AI insights: 'structured' (priority action +
-        // labeled ACTION/INFO/GOOD cards) or 'narrative' (plain bullet-point summary).
+        // labelled ACTION/INFO/GOOD cards) or 'narrative' (plain bullet-point summary).
         // 'orderInsightsStyle' => 'structured',
 
         // Custom prompt for per-order AI insights. Leave empty to use the built-in default.
         // Use {placeholder} tokens - see docs for the full list.
         // 'orderInsightsPrompt' => '',
 
-        // Custom prompt for the store-level AI insights dashboard widget.
+        // Custom prompt for store-wide AI insights (the AI Insights page and widget).
         // Use {placeholder} tokens - see docs for the full list.
         // 'storeInsightsPrompt' => '',
     ],
@@ -111,7 +113,6 @@ return [
 
     'production' => [
         'autoPruneLogs' => 90,
-        'collectUserIp' => true,
         'collectUserId' => true,
     ],
 ];

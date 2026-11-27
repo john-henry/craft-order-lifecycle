@@ -98,7 +98,7 @@ class StatsService extends Component
             ]);
         }
 
-        [$avgCartValue] = $this->_averageCompletedOrderValue($since, $storeId);
+        [$avgCartValue, $currency] = $this->_averageCompletedOrderValue($since, $storeId);
 
         $stats = [
             'totalLogs' => $counts['total'],
@@ -115,6 +115,7 @@ class StatsService extends Component
             'avgPaymentAttempts' => $this->_getAveragePaymentAttempts($since, $storeId),
             'returningCustomerRate' => $this->_getReturningCustomerRate($since, $storeId),
             'avgCartValue' => $avgCartValue,
+            'currency' => $currency,
             'emailSuccessRate' => $emailStats['successRate'],
             'emailsSent' => $emailStats['sent'],
             'emailsFailed' => $emailStats['failed'],

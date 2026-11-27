@@ -12,6 +12,7 @@ use craft\commerce\Plugin as Commerce;
 use craft\web\Controller;
 use johnhenry\orderlifecycle\enums\EventType;
 use johnhenry\orderlifecycle\OrderLifecycle;
+use johnhenry\orderlifecycle\services\OrderLifecycleLogger;
 use Throwable;
 use yii\base\InvalidConfigException;
 use yii\db\Exception;
@@ -105,7 +106,7 @@ class AiController extends Controller
         if ($apiKey === '') {
             return $this->asJson([
                 'success' => false,
-                'error' => Craft::t('order-lifecycle', 'No Anthropic API key configured. Add one in Settings → Order Lifecycle → Integrations.'),
+                'error' => Craft::t('order-lifecycle', 'No Anthropic API key configured. Add one in Order Lifecycle → Settings → Integrations.'),
             ]);
         }
 
@@ -242,9 +243,9 @@ class AiController extends Controller
      */
     private function _buildOrderSummary(Order $order): string
     {
-        $customerLabel = $order->getCustomer()
-            ? Craft::t('order-lifecycle', 'Registered')
-            : Craft::t('order-lifecycle', 'Guest');
+        $customerLabel = OrderLifecycleLogger::isGuest($order)
+            ? Craft::t('order-lifecycle', 'Guest')
+            : Craft::t('order-lifecycle', 'Registered');
 
         $statusLabel = $order->isCompleted
             ? Craft::t('order-lifecycle', 'Completed')

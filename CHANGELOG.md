@@ -1,5 +1,22 @@
 # Release Notes for Order Lifecycle
 
+## 2.0.1 - 2026-11-27
+
+### Changed
+- The order timeline uses three icon colours: grey for activity, green for an order going through, red for a failure.
+- Milestone events (completed, paid, refunded, status changes and emails) stand out on the timeline.
+- Identical events logged within a minute of each other with nothing changed now show once, with a count.
+- The timeline no longer shows "+0s since previous" on events logged at the same moment.
+- Changes on the timeline show money as currency, true and false as Yes and No, and an empty value as a dash.
+
+### Fixed
+- The Lifecycle Stats dashboard widget no longer breaks the whole Dashboard.
+- Refund amounts on the timeline show in the order's currency.
+- Screen readers now announce the column name on each switch in the export's column list.
+- The "Select All" button on the Export page is readable against its background.
+- Guest orders no longer show as registered customers on the timeline or in AI insights. Events already logged keep their old label.
+- The no-API-key notices point to the right settings page.
+
 ## 2.0.0 - 2026-09-22 [CRITICAL]
 
 > [!IMPORTANT]

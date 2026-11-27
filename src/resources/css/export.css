@@ -9,15 +9,7 @@
 }
 
 #select-all-events {
-    cursor: pointer;
-    color:var(--link-color);
-    text-decoration: inherit;
     margin-bottom: 10px;
-    display: inline-block;
-}
-
-#select-all-events:hover {
-    text-decoration: underline;
 }
 
 #event-types-list > div {

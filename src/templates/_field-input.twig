@@ -1,8 +1,23 @@
 
 {% import 'order-lifecycle/_macros/status-badges.twig' as badges %}
 {% import 'order-lifecycle/_macros/event-icons.twig' as icons %}
+{% import _self as diff %}
 {% set jsonFlags = constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES') %}
 {% set jsonPrettyFlags = jsonFlags b-or constant('JSON_PRETTY_PRINT') %}
+{% set moneyFields = ['totalPrice', 'totalShippingCost', 'itemTotal', 'totalDiscount', 'totalTax', 'totalPaid'] %}
+{% macro diffValue(change, value, currency, jsonFlags, moneyFields) %}
+{%- if value is null or value is same as('') -%}
+<span class="lifecycle-diff-none" aria-hidden="true">&mdash;</span><span class="visually-hidden">{{ 'None'|t('order-lifecycle') }}</span>
+{%- elseif value is same as(true) or value is same as(false) -%}
+{{ (value ? 'Yes' : 'No')|t('app') }}
+{%- elseif value is iterable -%}
+<code>{{ value|json_encode(jsonFlags) }}</code>
+{%- elseif currency and (change.field ?? null) in moneyFields and value is numeric -%}
+{{ value|currency(currency) }}
+{%- else -%}
+{{ value }}
+{%- endif -%}
+{% endmacro %}
 <div class="order-lifecycle-field">
    
    {% if logs|length %}
@@ -45,7 +60,7 @@
          <div class="lifecycle-ai-result{% if not savedInsights %} hidden{% endif %}" aria-live="polite">
             {% if order is defined and order %}
                <div class="lifecycle-analysis-summary">
-                  {%- set customerLabel = order.getCustomer() ? 'Registered'|t('order-lifecycle') : 'Guest'|t('order-lifecycle') -%}
+                  {%- set customerLabel = isGuest ? 'Guest'|t('order-lifecycle') : 'Registered'|t('order-lifecycle') -%}
                   {%- set statusLabel = order.isCompleted ? 'Completed'|t('order-lifecycle') : (order.getOrderStatus()?.name ?? 'Pending'|t('order-lifecycle')) -%}
                   {%- set summarySegments = [
                      'Order #{reference}'|t('order-lifecycle', { reference: order.reference ?? order.id }),
@@ -104,11 +119,25 @@
 
 	  <div class="visually-hidden lifecycle-timeline-status" role="status" aria-live="polite"></div>
 
+	  {% set milestoneTypes = ['orderCompleted', 'orderPaid', 'paymentRefunded', 'statusChanged', 'emailSent', 'emailFailed'] %}
+	  {% set repeats = {} %}
+	  {% set groupKey = null %}
+	  {% for row in timeline %}
+		 {% set previousRow = loop.first ? null : timeline[loop.index0 - 1] %}
+		 {% if previousRow and previousRow.type == row.type and previousRow.message == row.message and not row.orderChanges and not previousRow.orderChanges and not row.transactionId and previousRow.deltaSeconds is not null and previousRow.deltaSeconds < 60 %}
+			{% set repeats = repeats|merge({('r' ~ groupKey): (repeats['r' ~ groupKey] ?? 1) + 1, ('r' ~ loop.index0): 0}) %}
+		 {% else %}
+			{% set groupKey = loop.index0 %}
+		 {% endif %}
+	  {% endfor %}
+
 	  <div class="lifecycle-timeline">
-		 {% for row in timeline %}
+		 {% for index, row in timeline|filter((r, i) => (repeats['r' ~ i] ?? 1) > 0) %}
+			{% set repeatCount = repeats['r' ~ index] ?? 1 %}
 			{% set snapshotData = row.snapshotData %}
 			{% set matchingTransaction = row.transactionId ? (transactionsById[row.transactionId] ?? null) : null %}
-			<div class="lifecycle-event" data-pill="{{ row.pill }}" data-date="{{ row.date|date('Y-m-d') }}">
+			{% set failed = row.type == 'emailFailed' or (matchingTransaction.status ?? null) == 'failed' %}
+			<div class="lifecycle-event{% if row.type in milestoneTypes or failed %} lifecycle-event--milestone{% endif %}" data-pill="{{ row.pill }}" data-date="{{ row.date|date('Y-m-d') }}">
 			   <details class="lifecycle-event-details">
 				  <summary class="lifecycle-event-summary">
 					 <div class="event-icon">
@@ -118,6 +147,9 @@
 						{% set attemptCount = snapshotData.payload.attempt ?? null %}
 
 						<strong>{{ row.label }}</strong>
+						{% if repeatCount > 1 %}
+						   <span class="lifecycle-event-repeat">{{ '×{count}'|t('order-lifecycle', { count: repeatCount }) }}<span class="visually-hidden">, {{ 'logged {count} times in a row with no changes'|t('order-lifecycle', { count: repeatCount }) }}</span></span>
+						{% endif %}
 						{% if attemptCount and attemptCount > 1 %}
 						   <span class="attempt-count">{{ '({count} attempts)'|t('order-lifecycle', { count: attemptCount }) }}</span>
 						{% endif %}
@@ -142,7 +174,7 @@
 						{% endif %}
 					 </div>
 					 <div class="lifecycle-event-meta">
-						{% if row.deltaSeconds is not null %}
+						{% if row.deltaSeconds %}
 						   {% set delta = row.deltaSeconds %}
 						   <span class="lifecycle-event-delta">+{% if delta >= 86400 %}{{ (delta / 86400)|round(0, 'floor') }}d {{ ((delta % 86400) / 3600)|round(0, 'floor') }}h{% elseif delta >= 3600 %}{{ (delta / 3600)|round(0, 'floor') }}h {{ ((delta % 3600) / 60)|round(0, 'floor') }}m{% elseif delta >= 60 %}{{ (delta / 60)|round(0, 'floor') }}m {{ delta % 60 }}s{% else %}{{ delta }}s{% endif %} {{ 'since previous'|t('order-lifecycle') }}</span>
 						{% endif %}
@@ -160,7 +192,7 @@
 						   {% set refundNote = snapshotData.payload.note ?? null %}
 						   {% if refundAmount is not null %}
 							  {% set paymentChanges = paymentChanges|merge([
-								 { label: 'Amount Refunded'|t('order-lifecycle'), from: null, to: refundAmount|currency(snapshotData.payload.currency ?? null) },
+								 { label: 'Amount Refunded'|t('order-lifecycle'), from: null, to: refundAmount|currency(snapshotData.payload.currency ?? snapshotData.order.currency ?? null) },
 							  ]) %}
 						   {% endif %}
 						   {% if refundNote %}
@@ -198,9 +230,10 @@
 								 {% for change in allChanges %}
 									<tr>
 									   <th scope="row" class="lifecycle-diff-field">{{ change.label ?? change.field }}</th>
-									   <td class="lifecycle-diff-from"><s>{{ change.from|json_encode(jsonFlags) }}</s></td>
+									   {% set diffCurrency = snapshotData.order.currency ?? null %}
+									   <td class="lifecycle-diff-from">{% if change.from is null or change.from is same as('') %}{{ diff.diffValue(change, change.from, diffCurrency, jsonFlags, moneyFields) }}{% else %}<s>{{ diff.diffValue(change, change.from, diffCurrency, jsonFlags, moneyFields) }}</s>{% endif %}</td>
 									   <td class="lifecycle-diff-arrow" aria-hidden="true">&rarr;</td>
-									   <td class="lifecycle-diff-to">{{ change.to|json_encode(jsonFlags) }}</td>
+									   <td class="lifecycle-diff-to">{{ diff.diffValue(change, change.to, diffCurrency, jsonFlags, moneyFields) }}</td>
 									</tr>
 								 {% endfor %}
 							  </tbody>
@@ -305,11 +338,11 @@
 
    {% else %}
 	  <div class="empty-state">
-		 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 			<circle cx="12" cy="12" r="10"></circle>
 			<polyline points="12 6 12 12 16 14"></polyline>
 		 </svg>
-		 <h3>{{ 'No Order lifecycle events yet'|t('order-lifecycle') }}</h3>
+		 <h3>{{ 'No lifecycle events yet'|t('order-lifecycle') }}</h3>
 		 <p>{{ 'Events will be recorded as customers interact with this order.'|t('order-lifecycle') }}</p>
 	  </div>
 	  

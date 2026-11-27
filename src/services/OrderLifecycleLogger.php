@@ -366,6 +366,26 @@ class OrderLifecycleLogger extends Component
     }
 
     /**
+     * Whether an order belongs to a guest rather than a registered customer.
+     *
+     * Commerce gives every order with an email a user, creating an inactive
+     * one for a guest, so having a customer says nothing. A registered
+     * customer is one whose account can be signed into, the same test
+     * Commerce applies before saving addresses to an account.
+     *
+     * @param Order $order The order to check.
+     * @return bool
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 2.0.1
+     */
+    public static function isGuest(Order $order): bool
+    {
+        $customer = $order->getCustomer();
+
+        return $customer === null || !$customer->getIsCredentialed();
+    }
+
+    /**
      * Returns the timeline entries for an order: lifecycle logs (excluding
      * AI insights) enriched with their filter pill, the number of seconds
      * elapsed since the previous chronological event, which top-level order
@@ -374,11 +394,13 @@ class OrderLifecycleLogger extends Component
      *
      * Entries are newest-first, matching {@see getLogsForOrder()}. The oldest
      * entry has no previous event to compare against, so its `deltaSeconds`
-     * and `orderChanges` are null/empty.
+     * is null and its `orderChanges` diffs against an empty baseline, listing
+     * the order's initial values.
      *
      * Each row gains:
      *
      * - `pill` - the filter pill the event shows under
+     * - `label` - the event type's readable label
      * - `deltaSeconds` - seconds since the previous event, null for the oldest
      * - `orderChanges` - the field-by-field diff against the previous event
      * - `snapshotData` - the decoded snapshot, null where it is absent or malformed
@@ -872,9 +894,9 @@ class OrderLifecycleLogger extends Component
             return false;
         }
 
-        $message = $order->getCustomer()
-            ? Craft::t('order-lifecycle', 'Registered customer visited checkout page')
-            : Craft::t('order-lifecycle', 'Guest customer visited checkout page');
+        $message = self::isGuest($order)
+            ? Craft::t('order-lifecycle', 'Guest customer visited checkout page')
+            : Craft::t('order-lifecycle', 'Registered customer visited checkout page');
 
         $this->log($order, EventType::CHECKOUT_STARTED, [
             'email' => $order->email,
@@ -920,9 +942,9 @@ class OrderLifecycleLogger extends Component
         if ($isNew) {
             // no previous snapshot yet, so generateChangeDescription() won't
             // run for this event - pass the message explicitly instead
-            $message = $order->getCustomer()
-                ? Craft::t('order-lifecycle', 'Cart initialized for registered customer')
-                : Craft::t('order-lifecycle', 'Cart initialized for guest customer');
+            $message = self::isGuest($order)
+                ? Craft::t('order-lifecycle', 'Cart initialized for guest customer')
+                : Craft::t('order-lifecycle', 'Cart initialized for registered customer');
             $this->log($order, EventType::CART_CREATED, [], $message);
         }
 
@@ -1471,9 +1493,8 @@ class OrderLifecycleLogger extends Component
             return;
         }
 
-        $customer = $order->getCustomer();
-        $customerType = $customer ? 'customer' : 'guest';
-        $customerId = $customer?->id;
+        $customerType = self::isGuest($order) ? 'guest' : 'customer';
+        $customerId = $order->getCustomer()?->id;
 
         $this->_log(
             $order,
@@ -1622,7 +1643,7 @@ class OrderLifecycleLogger extends Component
         $customer = $order->getCustomer();
         $customerInfo = [
             'email' => $order->email,
-            'isGuest' => !$customer,
+            'isGuest' => self::isGuest($order),
             'customerId' => $customer?->id,
             'userId' => $customer?->id,
         ];
