@@ -26,6 +26,7 @@ describe('StatsService::getStats() return shape', function () {
             'avgPaymentAttempts',
             'returningCustomerRate',
             'avgCartValue',
+            'currency',
             'emailSuccessRate',
             'emailsSent',
             'emailsFailed',

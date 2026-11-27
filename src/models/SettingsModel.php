@@ -52,7 +52,7 @@ class SettingsModel extends Model
     public bool $logEmailSent = true;
 
     /**
-     * @var bool Whether to show the lifecycle statistics table in the order field.
+     * @var bool Whether to show the lifecycle summary cards at the top of the order field.
      */
     public bool $showLifecycleStats = true;
 
@@ -162,7 +162,7 @@ class SettingsModel extends Model
             'logOrderComplete' => Craft::t('order-lifecycle', 'Log Order Complete Event'),
             'logOrderPaid' => Craft::t('order-lifecycle', 'Log Order Paid Event'),
             'logEmailSent' => Craft::t('order-lifecycle', 'Log Email Sent Events'),
-            'showLifecycleStats' => Craft::t('order-lifecycle', 'Show Lifecycle Statistics Widget'),
+            'showLifecycleStats' => Craft::t('order-lifecycle', 'Show Lifecycle Stats'),
             'logCouponChanges' => Craft::t('order-lifecycle', 'Log Coupon/Discount Changes'),
             'logAddressChanges' => Craft::t('order-lifecycle', 'Log Address Changes'),
             'logCustomerChanges' => Craft::t('order-lifecycle', 'Log Customer Changes'),

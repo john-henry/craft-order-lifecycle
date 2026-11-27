@@ -12,7 +12,7 @@ return [
     'Abandonment' => 'Abandonment',
     'Abandonment rate is {rate}% - above the 75% threshold. Consider reviewing the checkout flow.' => 'Abandonment rate is {rate}% - above the 75% threshold. Consider reviewing the checkout flow.',
     'Across {count} orders' => 'Across {count} orders',
-    'Add an Anthropic API key in Settings → Order Lifecycle → Integrations to enable AI Insights.' => 'Add an Anthropic API key in Settings → Order Lifecycle → Integrations to enable AI Insights.',
+    'Add an Anthropic API key in Order Lifecycle → Settings → Integrations to enable AI Insights.' => 'Add an Anthropic API key in Order Lifecycle → Settings → Integrations to enable AI Insights.',
     'Additional context or specific questions for Claude to consider...' => 'Additional context or specific questions for Claude to consider...',
     'Address' => 'Address',
     'Address Line 2' => 'Address Line 2',
@@ -146,11 +146,14 @@ return [
     'New' => 'New',
     'New value' => 'New value',
     'Newest first' => 'Newest first',
-    'No Anthropic API key configured. Add one in Settings → Order Lifecycle to enable AI Insights.' => 'No Anthropic API key configured. Add one in Settings → Order Lifecycle to enable AI Insights.',
+    'No Anthropic API key configured. Add one in Order Lifecycle → Settings → Integrations to enable AI Insights.' => 'No Anthropic API key configured. Add one in Order Lifecycle → Settings → Integrations to enable AI Insights.',
     'No field changes recorded for this event.' => 'No field changes recorded for this event.',
+    'None' => 'None',
+    '×{count}' => '×{count}',
+    'logged {count} times in a row with no changes' => 'logged {count} times in a row with no changes',
     'No insights generated yet.' => 'No insights generated yet.',
     'No insights generated yet. Click the button below to analyse your store.' => 'No insights generated yet. Click the button below to analyse your store.',
-    'No Order lifecycle events yet' => 'No Order lifecycle events yet',
+    'No lifecycle events yet' => 'No lifecycle events yet',
     'No orders tracked in this period. Lifecycle logging may not be active.' => 'No orders tracked in this period. Lifecycle logging may not be active.',
     'No previous orders' => 'No previous orders',
     'Of completed orders' => 'Of completed orders',
@@ -307,7 +310,6 @@ return [
     'Enter an environment variable holding the key, like $ANTHROPIC_API_KEY, not the key itself.' => 'Enter an environment variable holding the key, like $ANTHROPIC_API_KEY, not the key itself.',
     'Log Email Sent Events' => 'Log Email Sent Events',
     'Per-Order Insights Style' => 'Per-Order Insights Style',
-    'Show Lifecycle Statistics Widget' => 'Show Lifecycle Statistics Widget',
     'Write log entries via the Craft queue instead of inline. Only the database write moves to the queue: each event is still worked out during the order save. Useful where log writes compete with a busy checkout. Requires the queue worker to be running.' => 'Write log entries via the Craft queue instead of inline. Only the database write moves to the queue: each event is still worked out during the order save. Useful where log writes compete with a busy checkout. Requires the queue worker to be running.',
 
     // Logger messages
@@ -322,7 +324,7 @@ return [
 
     // Controllers
     'Couldn\'t save plugin settings.' => 'Couldn\'t save plugin settings.',
-    'No Anthropic API key configured. Add one in Settings → Order Lifecycle → Integrations.' => 'No Anthropic API key configured. Add one in Settings → Order Lifecycle → Integrations.',
+    'No Anthropic API key configured. Add one in Order Lifecycle → Settings → Integrations.' => 'No Anthropic API key configured. Add one in Order Lifecycle → Settings → Integrations.',
     'No Anthropic API key configured.' => 'No Anthropic API key configured.',
     'No lifecycle data available for this order.' => 'No lifecycle data available for this order.',
     'Order not found.' => 'Order not found.',

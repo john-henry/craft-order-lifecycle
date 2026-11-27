@@ -2,7 +2,7 @@
   "name": "johnhenry/craft-order-lifecycle",
   "description": "A timeline of every step each Craft Commerce order took, with store analytics and optional AI insights.",
   "type": "craft-plugin",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "keywords": [
     "craft-commerce",
     "order history",

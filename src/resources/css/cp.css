@@ -216,7 +216,18 @@
 
 .lifecycle-event-main strong {
     font-size: 14px;
+    font-weight: 500;
     color: var(--dark-text-color);
+}
+
+.lifecycle-event--milestone .lifecycle-event-main strong {
+    font-weight: 700;
+}
+
+.lifecycle-event-repeat {
+    font-size: 12px;
+    color: var(--medium-text-color);
+    font-variant-numeric: tabular-nums;
 }
 
 .lifecycle-event-message {
@@ -312,22 +323,27 @@
 }
 
 .lifecycle-diff-from,
+.lifecycle-diff-to {
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.lifecycle-diff-from {
+    color: var(--medium-text-color);
+}
+
 .lifecycle-diff-arrow,
-.lifecycle-diff-to {
-    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
-}
-
-.lifecycle-diff-from s {
-    color: var(--red-700);
-}
-
-.lifecycle-diff-arrow {
-    color: #4b5563;
+.lifecycle-diff-none {
+    color: var(--medium-text-color);
 }
 
 .lifecycle-diff-to {
-    color: #15803d;
+    color: var(--text-color);
     font-weight: 600;
+}
+
+.lifecycle-diff-table code {
+    font-size: 12px;
 }
 
 .lifecycle-snapshot-toggle {
@@ -366,50 +382,20 @@
     color: white;
 }
 
-.status-icon.cart {
-    background: #3b82f6;
-    color: white;
+/* Three tones: neutral activity, green for an order going through, red for a failure */
+.status-icon {
+    background: var(--gray-500);
 }
 
-.status-icon.item {
-    background: #8b5cf6;
+.status-icon.order,
+.status-icon.order-completed,
+.status-icon.payment.success {
+    background: var(--green-600);
 }
 
-.status-icon.order {
-    background: #10b981;
-}
-
-.status-icon.order-completed {
-    background: #10b981;
-}
-
-.status-icon.payment {
-    background: #f59e0b;
-}
-
-.status-icon.address {
-    background: #ec4899;
-}
-.status-icon.email {
-    background: #06b6d4;
-}
-
+.status-icon.payment.error,
 .status-icon.email.error {
-    background: #ef4444;
-}
-.status-icon.customer-set {
-    background: #6366f1;
-}
-.status-icon.status-update {
-    background: #8b5cf6;
-}
-
-.status-icon.checkout {
-    background: #14b8a6;
-}
-
-.status-icon.coupon {
-    background: #f97316;
+    background: var(--red-600);
 }
 
 .snapshot-content {
